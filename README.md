@@ -4,7 +4,7 @@
 
 An independent, open-source testing framework for lossless compression, codecs, archive formats, and their implementations.
 
-> **Project status: pre-alpha.** The trusted local gzip worker and conformance fixtures are available. The broader CLI, benchmark suites and scoring profiles are proposals.
+> **Project status: pre-alpha.** The trusted local gzip and Zstandard worker and conformance fixtures are available. The broader CLI, benchmark suites and scoring profiles are proposals.
 
 ## Why Isobar?
 
@@ -136,7 +136,7 @@ Pareto analysis will identify configurations that cannot be improved in one sele
 
 Identifiers are provisional. Specifications will be independently versioned, with documented compatibility and change policies.
 
-The [research ledger](research/README.md) links to pinned source reviews and reproduced findings. The [experimental conformance suite](conformance/README.md) exercises draft evidence schemas, scoring and gzip/Zstandard artifact vectors. The [trusted local worker](worker/README.md) runs a single in-memory gzip measurement with exact reconstruction and a worker timeout. It can emit [experimental IBS-0003 evidence](conformance/README.md#verify-worker-evidence) for independent verification. The [whole-artifact checks](conformance/README.md#verify-whole-gzip-and-zstandard-artifacts) compare candidate and reference decode paths for gzip and Zstandard.
+The [research ledger](research/README.md) links to pinned source reviews and reproduced findings. The [experimental conformance suite](conformance/README.md) exercises draft evidence schemas, scoring and gzip/Zstandard artifact vectors. The [trusted local worker](worker/README.md) runs a single in-memory gzip or Zstandard measurement with exact reconstruction and a worker timeout. It can emit [experimental IBS-0003 evidence](conformance/README.md#verify-worker-evidence) for independent verification. The [whole-artifact checks](conformance/README.md#verify-whole-gzip-and-zstandard-artifacts) compare candidate and reference decode paths for gzip and Zstandard.
 
 ## CLI design
 

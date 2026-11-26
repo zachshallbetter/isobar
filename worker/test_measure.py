@@ -183,6 +183,27 @@ class WorkerTests(unittest.TestCase):
             self.assertEqual(process.wait.call_count, 2)
             self.assertEqual(list(Path(scratch).iterdir()), [])
 
+    def test_zstandard_worker_cli_emits_qualified_exact_evidence(self):
+        library = os.environ.get("ISOBAR_ZSTD_LIB")
+        if not library:
+            self.skipTest("set ISOBAR_ZSTD_LIB to test the native worker")
+        for content in (b"", bytes(range(256)) * 5):
+            with self.subTest(size=len(content)), tempfile.TemporaryDirectory() as temporary:
+                source = Path(temporary) / "input.bin"
+                source.write_bytes(content)
+                result = subprocess.run(
+                    [sys.executable, "-B", str(SCRIPT), "--codec", "zstd",
+                     "--zstd-lib", library, "--evidence", "zstd-test", str(source)],
+                    capture_output=True, text=True, timeout=10,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                observation, validation = map(json.loads, result.stdout.splitlines())
+                self.assertEqual(observation["config_id"], "zstd-3")
+                self.assertEqual(observation["work_bytes"], len(content))
+                self.assertGreater(observation["elapsed_ns"], 0)
+                self.assertEqual(validation["status"], "verified")
+                self.assertEqual(validation["validation_id"], observation["validation_ref"])
+
     def test_cli_reads_regular_file_and_reports_clock(self):
         with tempfile.TemporaryDirectory() as root:
             source = Path(root) / "binary input"

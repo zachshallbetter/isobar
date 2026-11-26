@@ -37,3 +37,15 @@ Install the [conformance dependencies](../../conformance/README.md) to run the a
 /tmp/isobar-conformance/bin/python -B conformance/verify_evidence.py research/experiments/blocked-macos.jsonl
 /tmp/isobar-conformance/bin/python -B conformance/verify_evidence.py research/experiments/blocked-linux-qemu.jsonl
 ```
+
+## Run the gzip and Zstandard encode pilot
+
+Install the Python and Ruby conformance dependencies and set the trusted shared libraries as described in [whole-artifact conformance](../../conformance/README.md#verify-whole-gzip-and-zstandard-artifacts). Set `ISOBAR_ZSTD_REVISION` and `ISOBAR_LIBDEFLATE_REVISION` to the revisions used for those builds if known. The manifest always records the library digests.
+
+```sh
+python3 -B -m research.experiments.codec_benchmark /tmp/isobar-gzip-zstd-run
+```
+
+Use a new output directory with a unique name. The runner launches twelve serial independent processes with counterbalanced gzip level 6 and Zstandard level 3 batches over the existing deterministic 64 KiB fixture. It uses the local worker's in-memory timing boundary and performs both format-specific exact decode checks after each invocation. It retains the complete artifacts, invocation timings, IBS-0003 evidence, execution plan, and per-worker clock probes, including warm-ups. Python and Ruby must agree on the ratio-inclusive IBS-0004 replay, using equal weights and gzip as the baseline. The checked-in replay continues to withhold publication.
+
+`timing.json` contains the paired 95% interval for Zstandard/gzip time, computed on the twelve worker-level log-ratio averages. For the corresponding Zstandard/gzip speed interval, invert both endpoints and reverse their order. Serial encode throughput divides summed work by summed time. The interval represents variation between workers on this host and fixture.
