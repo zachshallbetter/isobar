@@ -26,6 +26,7 @@ INVOCATIONS = 3
 WORKER_TIMEOUT_SECONDS = 10
 CLOCK_PROBE_PAIRS = 128
 DEFAULT_SEED = 20261126
+INPUT_ID = "blocked-gzip-v1"
 LEVELS = {"reference": 1, "candidate": 6}
 WORKER_T = 2.201  # 0.975 quantile, 11 degrees of freedom
 UNCLUSTERED_T = 2.012  # 0.975 quantile, 47 degrees of freedom
@@ -77,7 +78,7 @@ def batch_records(step, trials, run_id):
         "worker_id": f"worker-{step.worker}",
         "block_id": f"block-{step.block}",
         "sequence": step.sequence,
-        "input_id": "blocked-gzip-v1",
+        "input_id": INPUT_ID,
         "config_id": step.config,
         "operation": "encode",
         "phase": step.phase,
@@ -147,6 +148,30 @@ def log_ratio(reference_ns, candidate_ns):
     return math.log(candidate_ns / reference_ns)
 
 
+def verified_batch(observation, validations, expected_count, work_per_invocation):
+    if observation is None or observation["status"] != "ok":
+        return False
+
+    elapsed, work, count = (observation.get(key) for key in
+                            ("elapsed_ns", "work_bytes", "invocation_count"))
+    if (any(type(value) is not int for value in (elapsed, work, count))
+            or not 0 < elapsed <= MAX_COUNTER
+            or work != work_per_invocation * expected_count or count != expected_count):
+        raise ValueError(f"Unexpected batch measurement: {observation['observation_id']}")
+
+    validation = validations.get(observation.get("validation_ref"))
+    if validation is None:
+        return False
+    checked = validation.get("checked_invocations")
+    if (validation.get("observation_id") != observation["observation_id"]
+            or validation.get("run_id") != observation["run_id"]
+            or type(checked) is not int or checked != expected_count
+            or validation.get("cadence") != "every_invocation"
+            or validation.get("method") != "exact_bytes"):
+        raise ValueError(f"Unexpected batch validation: {observation['observation_id']}")
+    return validation["status"] == "verified"
+
+
 def summarize(plan, records, work_per_invocation):
     observations = {}
     validations = {}
@@ -171,34 +196,30 @@ def summarize(plan, records, work_per_invocation):
     if observations.keys() - expected:
         raise ValueError("Observed an unscheduled batch")
     paired = defaultdict(dict)
+    durations = defaultdict(list)
     unavailable = []
     totals = {config: {"work_bytes": 0, "elapsed_ns": 0} for config in LEVELS}
 
     for step in plan:
         observation = observations.get(step.observation_id)
         if observation is not None:
-            actual = (observation["worker_id"], observation["block_id"], observation["phase"],
-                      observation["sequence"], observation["config_id"])
+            actual = tuple(observation.get(key) for key in (
+                "worker_id", "block_id", "phase", "sequence", "config_id", "operation", "input_id",
+            ))
             required = (f"worker-{step.worker}", f"block-{step.block}", step.phase,
-                        step.sequence, step.config)
-            if actual != required:
+                        step.sequence, step.config, "encode", INPUT_ID)
+            if actual != required or type(observation.get("sequence")) is not int:
                 raise ValueError(f"Observation differs from schedule: {step.observation_id}")
+
+        count = 1 if step.phase == "warmup" else INVOCATIONS
+        verified = verified_batch(observation, validations, count, work_per_invocation)
+        if verified:
+            durations[step.config, step.phase].append(observation["elapsed_ns"] / count)
         if step.phase != "measurement":
             continue
-
-        validation = validations.get(observation.get("validation_ref")) if observation else None
-        if (not observation or observation["status"] != "ok" or not validation
-                or validation["status"] != "verified"):
+        if not verified:
             unavailable.append(step.observation_id)
             continue
-        if (observation["invocation_count"] != INVOCATIONS
-                or observation["work_bytes"] != work_per_invocation * INVOCATIONS
-                or observation["elapsed_ns"] <= 0
-                or validation["observation_id"] != step.observation_id
-                or validation["run_id"] != observation["run_id"]
-                or validation["checked_invocations"] != INVOCATIONS
-                or validation["cadence"] != "every_invocation"):
-            raise ValueError(f"Unexpected batch measurement or validation: {step.observation_id}")
 
         elapsed = observation["elapsed_ns"]
         paired[step.worker, step.block][step.config] = elapsed
@@ -217,13 +238,6 @@ def summarize(plan, records, work_per_invocation):
     estimate, lower, upper = blocked_interval(worker_blocks)
     for total in totals.values():
         total["bytes_per_second"] = total["work_bytes"] * 1_000_000_000 / total["elapsed_ns"]
-    durations = defaultdict(list)
-    for observation in observations.values():
-        validation = validations.get(observation.get("validation_ref"))
-        if observation["status"] == "ok" and validation and validation["status"] == "verified":
-            durations[observation["config_id"], observation["phase"]].append(
-                observation["elapsed_ns"] / observation["invocation_count"]
-            )
     observational_means = {config: {} for config in LEVELS}
     for (config, phase), values in durations.items():
         observational_means[config][phase] = median(values)

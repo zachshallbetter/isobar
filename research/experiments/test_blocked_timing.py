@@ -96,6 +96,22 @@ class BlockedTimingTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     timing.summarize(self.plan, altered, 5)
 
+    def test_rejects_batches_outside_the_encode_validation_contract(self):
+        records = controlled_records(self.plan)
+        cases = (
+            (-2, "operation", "decode", "differs from schedule"),
+            (-2, "input_id", "wrong-input", "differs from schedule"),
+            (-2, "elapsed_ns", 1.5, "batch measurement"),
+            (-2, "elapsed_ns", timing.MAX_COUNTER + 1, "batch measurement"),
+            (-1, "method", "size_only", "batch validation"),
+        )
+        for index, field, value, message in cases:
+            with self.subTest(field=field, value=value):
+                altered = records.copy()
+                altered[index] = dict(records[index], **{field: value})
+                with self.assertRaisesRegex(ValueError, message):
+                    timing.summarize(self.plan, altered, 5)
+
     def test_nominal_interval_and_pseudoreplication_control(self):
         scenarios = timing.simulate(timing.DEFAULT_SEED, 2000)["scenarios"]
         for name in ("homogeneous", "heterogeneous"):

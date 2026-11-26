@@ -14,6 +14,21 @@ Pass the absolute path to the built binary with `--zstd` if it is not on PATH. T
 
 Structural schema checks, semantic reference checks and measurement qualification are separate assertions. The measurement records use opaque fixture identifiers. They do not define a run identity or a hash canonicalization scheme.
 
+## Run the complete local suite
+
+Set up the Python and Ruby dependencies, native libraries, and pinned report inputs described below. From the repository root, set `upstream` to the [pinned source checkout directory](../research/experiments/README.md).
+
+```sh
+: "${ISOBAR_LIBDEFLATE:?Set the libdeflate path}" "${ISOBAR_ZSTD_LIB:?Set the libzstd path}"
+: "${ISOBAR_LZBENCH_REPORT_DIR:?Set the lzbench report directory}" "${ISOBAR_TURBOBENCH_REPORT:?Set the pinned TurboBench report path}"
+: "${upstream:?Set the pinned source checkout directory}"
+/tmp/isobar-conformance/bin/python -B -m unittest discover -v
+/tmp/isobar-conformance/bin/python -B conformance/check.py --zstd /path/to/zstd
+/tmp/isobar-conformance/bin/python -B research/experiments/upstream.py "$upstream"
+```
+
+The dependency checks keep the pinned-report tests enabled and surface missing library paths before discovery. The vector checker and upstream reproducer run separately from the unit suite.
+
 ## Verify worker evidence
 
 Install the Python dependency above. Run the reader against an experimental IBS-0003 JSONL file.
