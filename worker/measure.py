@@ -1,4 +1,4 @@
-"""Run a single trusted, in-memory gzip measurement in a local worker process."""
+"""Run a single trusted, in-memory compression measurement in a local worker process."""
 import argparse
 from dataclasses import astuple, dataclass
 import gzip
@@ -15,10 +15,11 @@ import tempfile
 import time
 import zlib
 
-if __package__:
-    from .artifact import MAX_DECODED_BYTES, decode_gzip
-else:
-    from artifact import MAX_DECODED_BYTES, decode_gzip
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from worker.artifact import MAX_DECODED_BYTES, decode_gzip
+from worker.zstandard import Zstandard
 
 
 MAX_INPUT_BYTES = MAX_DECODED_BYTES
@@ -78,7 +79,7 @@ class WorkerResult:
         return f"{prefix}status={self.status} qualified=false{reason}"
 
 
-def evidence_records(result, run_id, phase):
+def evidence_records(result, run_id, phase, config_id="gzip-6"):
     observation = {
         "schema_version": SCHEMA_VERSION,
         "run_id": run_id,
@@ -87,7 +88,7 @@ def evidence_records(result, run_id, phase):
         "block_id": "block-1",
         "sequence": 1,
         "input_id": "input-1",
-        "config_id": "gzip-6",
+        "config_id": config_id,
         "operation": "encode",
         "phase": phase,
         "status": result.status,
@@ -129,6 +130,11 @@ def encode_gzip(data, *, level=6, stream_factory=gzip.GzipFile):
 
 
 def measure(data, *, clock=time.perf_counter_ns, encode=encode_gzip, decode=decode_gzip):
+    trial, _ = measure_artifact(data, clock=clock, encode=encode, decode=decode)
+    return trial
+
+
+def measure_artifact(data, *, clock=time.perf_counter_ns, encode=encode_gzip, decode=decode_gzip):
     started = clock()
     artifact = encode(data)
     elapsed = clock() - started
@@ -141,7 +147,7 @@ def measure(data, *, clock=time.perf_counter_ns, encode=encode_gzip, decode=deco
         validation = "decode_error"
     else:
         validation = "verified" if reconstructed == data else "mismatch"
-    return Trial(elapsed, len(data), len(artifact), validation)
+    return Trial(elapsed, len(data), len(artifact), validation), artifact
 
 
 def stop_group(process):
@@ -201,11 +207,15 @@ def run_worker(argv, data, *, timeout, scratch_root=None):
             return WorkerResult(process.pid, trial.status, trial=trial)
 
 
-def child_main():
+def child_main(zstd_library=None):
     data = sys.stdin.buffer.read(MAX_INPUT_BYTES + 1)
     if len(data) > MAX_INPUT_BYTES:
         raise ValueError("input exceeds 1 MiB")
-    trial = measure(data)
+    if zstd_library is None:
+        trial = measure(data)
+    else:
+        codec = Zstandard(zstd_library)
+        trial = measure(data, encode=codec.encode, decode=codec.decode)
     print(json.dumps(astuple(trial)))
     return 0 if trial.qualified else UNQUALIFIED_EXIT
 
@@ -214,8 +224,13 @@ def main():
     if sys.argv[1:] == ["--child"]:
         return child_main()
 
+    if len(sys.argv) == 3 and sys.argv[1] == "--child":
+        return child_main(sys.argv[2])
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", nargs="?", type=Path, help="regular file, up to 1 MiB")
+    parser.add_argument("--codec", choices=("gzip", "zstd"), default="gzip")
+    parser.add_argument("--zstd-lib", type=Path, help="trusted shared libzstd; defaults to ISOBAR_ZSTD_LIB")
     parser.add_argument("--timeout", type=float, default=5.0, help="worker wall budget in seconds")
     parser.add_argument("--evidence", metavar="RUN_ID", help="emit experimental IBS-0003 JSONL")
     parser.add_argument("--warmup", action="store_true", help="mark evidence as a warm-up")
@@ -224,6 +239,21 @@ def main():
         parser.error("the worker requires POSIX process groups")
     if not math.isfinite(args.timeout) or args.timeout <= 0:
         parser.error("timeout must be finite and positive")
+
+    level = 6 if args.codec == "gzip" else 3
+    library_path = None
+    codec_version = f"zlib={zlib.ZLIB_RUNTIME_VERSION}"
+    if args.codec == "zstd":
+        library_path = args.zstd_lib or os.environ.get("ISOBAR_ZSTD_LIB")
+        if not library_path:
+            parser.error("--codec zstd requires --zstd-lib or ISOBAR_ZSTD_LIB")
+        try:
+            library_path = Path(library_path).resolve(strict=True)
+            codec_version = f"libzstd={Zstandard(library_path).identity['version']}"
+        except (OSError, AttributeError, ValueError) as error:
+            parser.error(f"could not load libzstd: {error}")
+    elif args.zstd_lib is not None:
+        parser.error("--zstd-lib requires --codec zstd")
 
     if args.evidence is not None:
         if not 1 <= len(args.evidence) <= 128:
@@ -248,12 +278,14 @@ def main():
         clock = time.get_clock_info("perf_counter")
         print(f"platform={platform.system()} kernel={platform.release()} arch={platform.machine()} "
               f"python={platform.python_implementation()}-{platform.python_version()} "
-              f"zlib={zlib.ZLIB_RUNTIME_VERSION}")
-        print(f"operation=gzip-encode level=6 threads=1 context=fresh clock={clock.implementation} "
+              f"{codec_version}")
+        print(f"operation={args.codec}-encode level={level} threads=1 context=fresh clock={clock.implementation} "
               f"monotonic={str(clock.monotonic).lower()} "
               f"reported_resolution_ns={clock.resolution * 1_000_000_000:g}")
     phase = "warmup" if args.warmup else "measurement"
     command = [sys.executable, "-B", str(Path(__file__).resolve()), "--child"]
+    if library_path is not None:
+        command.append(str(library_path))
     interrupted = False
     try:
         result = run_worker(command, data, timeout=args.timeout)
@@ -268,7 +300,7 @@ def main():
         print(result.report())
         return 0 if result.qualified else 1
 
-    records = tuple(evidence_records(result, args.evidence, phase))
+    records = tuple(evidence_records(result, args.evidence, phase, f"{args.codec}-{level}"))
     for record in records:
         print(json.dumps(record))
     if interrupted:

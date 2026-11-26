@@ -48,14 +48,7 @@ def decimal_log(value)
   end
 end
 
-def artifact_counts(source_path, gzip_path)
-  original = (File.binread(source_path, MAX_ORIGINAL + 1) || "".b)
-  artifact = (File.binread(gzip_path, MAX_ARTIFACT + 1) || "".b)
-  if original.bytesize > MAX_ORIGINAL || artifact.bytesize > MAX_ARTIFACT
-    raise InvalidEvidence, "Artifact or original exceeds the local format limits"
-  end
-  raise InvalidEvidence, "Empty gzip artifact" if artifact.empty?
-
+def gzip_matches(artifact, original)
   offset = 0
   output = "".b
   while offset < artifact.bytesize
@@ -73,11 +66,31 @@ def artifact_counts(source_path, gzip_path)
       reader.finish
     end
   end
-  raise InvalidEvidence, "Gzip artifact did not reconstruct the supplied input" unless output == original
-
-  [original.bytesize, artifact.bytesize, Digest::SHA256.hexdigest(original)]
+  output == original
 rescue Zlib::Error, EOFError => error
   raise InvalidEvidence, "Invalid gzip artifact: #{error.class}"
+end
+
+def artifact_counts(source_path, artifact_path)
+  original = (File.binread(source_path, MAX_ORIGINAL + 1) || "".b)
+  artifact = (File.binread(artifact_path, MAX_ARTIFACT + 1) || "".b)
+  if original.bytesize > MAX_ORIGINAL || artifact.bytesize > MAX_ARTIFACT
+    raise InvalidEvidence, "Artifact or original exceeds the local format limits"
+  end
+
+  exact = if artifact.start_with?("\x1f\x8b".b)
+            gzip_matches(artifact, original)
+          elsif artifact.start_with?("\x28\xb5\x2f\xfd".b) ||
+                (artifact.bytesize >= 4 && (artifact.getbyte(0) & 0xf0) == 0x50 &&
+                  artifact.byteslice(1, 3) == "\x2a\x4d\x18".b)
+            require_relative "zstandard_artifact"
+            zstandard_matches(artifact, original)
+          else
+            raise InvalidEvidence, "Unrecognized gzip or Zstandard artifact"
+          end
+  raise InvalidEvidence, "Artifact did not reconstruct the supplied input" unless exact
+
+  [original.bytesize, artifact.bytesize, Digest::SHA256.hexdigest(original)]
 end
 
 def slot(row)
@@ -86,14 +99,14 @@ end
 
 def collect_artifacts(arguments, measurements, qualified)
   supplied = Hash.new { |hash, key| hash[key] = [] }
-  arguments.each do |id, source, gzip|
+  arguments.each do |id, source, artifact|
     raise InvalidEvidence, "Artifact requires a qualified measurement observation" unless qualified[id]
 
     entries = supplied[id]
     if entries.length >= measurements.fetch(id).fetch("invocation_count")
       raise InvalidEvidence, "Too many artifact pairs for observation"
     end
-    entries << artifact_counts(source, gzip)
+    entries << artifact_counts(source, artifact)
   end
   supplied.each do |id, entries|
     row = measurements.fetch(id)
@@ -219,7 +232,7 @@ if $PROGRAM_NAME == __FILE__
       when "--ratio-weight-bps" then weight = Integer(ARGV.shift, 10)
       when "--artifact"
         pair = ARGV.shift(3)
-        raise InvalidEvidence, "Expected observation ID, original and gzip path" unless pair.length == 3
+        raise InvalidEvidence, "Expected observation ID, original and artifact path" unless pair.length == 3
 
         artifacts << pair
       else raise InvalidEvidence, "Unexpected scoring option"

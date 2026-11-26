@@ -174,6 +174,37 @@ class ScoringTests(unittest.TestCase):
             self.assertEqual(score["artifact_bytes"], str(expected_size))
             self.assertEqual(Fraction(score["metrics"]["ratio"]["value"]), Fraction(7, expected_size))
 
+    def test_mixed_codec_replay_counts_all_zstandard_frames_and_skippable_bytes(self):
+        gzip_artifact = self.add_trial("reference", 1, b"AB", 200)
+        # The extension deliberately stays .gz. Replay dispatches by frame magic.
+        zstd_artifact = self.add_trial("candidate", 1, b"AB", 100)
+        skip = bytes.fromhex("5f2a4d180300000078797a")
+        frames = bytes.fromhex("28b52ffd20010900004128b52ffd200109000042")
+        valid = skip + frames + skip
+        zstd_artifact.write_bytes(valid)
+        result = self.compare(pairs=self.pairs)
+        self.assertEqual(result["status"], "complete")
+        candidate = result["scores"]["candidate"]
+        self.assertEqual(candidate["artifact_bytes"], str(len(valid)))
+        self.assertEqual(Fraction(candidate["metrics"]["ratio"]["value"]), Fraction(2, len(valid)))
+        self.assertAlmostEqual(candidate["composite"]["value"],
+                               100 * math.sqrt(2 * gzip_artifact.stat().st_size / len(valid)))
+
+        for invalid in (valid[:-1], skip + frames[:-1], valid + b"junk",
+                        valid + gzip_artifact.read_bytes(), frames[:-1] + b"C", frames + frames):
+            with self.subTest(invalid=invalid.hex()):
+                zstd_artifact.write_bytes(invalid)
+                self.compare(pairs=self.pairs, invalid=True)
+
+    def test_zstandard_skip_only_artifact_counts_bytes_for_empty_input(self):
+        artifact = self.add_trial("reference", 1, b"", 100)
+        skip = bytes.fromhex("502a4d1800000000")
+        artifact.write_bytes(skip)
+        result = self.compare(pairs=self.pairs, ratio_bps=0)
+        self.assertEqual(result["status"], "complete")
+        self.assertEqual(result["scores"]["reference"]["artifact_bytes"], str(len(skip)))
+        self.assertEqual(result["scores"]["reference"]["metrics"]["ratio"], {"reason": "undefined_ratio"})
+
     def test_empty_original_is_undefined_ratio_and_zero_throughput(self):
         self.add_trial("reference", 1, b"", 100)
         result = self.compare(pairs=self.pairs)

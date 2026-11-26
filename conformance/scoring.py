@@ -2,13 +2,16 @@
 import argparse
 from collections import defaultdict
 from fractions import Fraction
+from functools import lru_cache
 from hashlib import sha256
 import json
 import math
+import os
 from pathlib import Path
 import sys
 
 from worker.artifact import MAX_ARTIFACT_BYTES, MAX_DECODED_BYTES, gzip_members
+from worker.zstandard import Zstandard, is_zstandard
 from .verify_evidence import strict_json, verify_records
 
 
@@ -58,6 +61,11 @@ def composite(metrics):
     return score if score > 0 else "out_of_range"
 
 
+@lru_cache(maxsize=1)
+def zstd_decoder(path):
+    return Zstandard(path)
+
+
 def artifact_counts(source_path, artifact_path):
     with Path(source_path).open("rb") as stream:
         source = stream.read(MAX_DECODED_BYTES + 1)
@@ -65,8 +73,20 @@ def artifact_counts(source_path, artifact_path):
         encoded = stream.read(MAX_ARTIFACT_BYTES + 1)
     if len(source) > MAX_DECODED_BYTES or len(encoded) > MAX_ARTIFACT_BYTES:
         raise ValueError("Artifact or original exceeds the local format limits")
-    if not gzip_members(encoded).matches(encoded, source):
-        raise ValueError("Gzip artifact did not reconstruct the supplied input")
+    if encoded.startswith(b"\x1f\x8b"):
+        result = gzip_members(encoded, output_limit=len(source))
+    elif is_zstandard(encoded):
+        library = os.environ.get("ISOBAR_ZSTD_LIB")
+        if not library:
+            raise ValueError("Zstandard replay requires ISOBAR_ZSTD_LIB")
+        try:
+            result = zstd_decoder(library).decode_frames(encoded, output_limit=len(source))
+        except AttributeError as error:
+            raise ValueError("Invalid libzstd library") from error
+    else:
+        raise ValueError("Unrecognized gzip or Zstandard artifact")
+    if not result.matches(encoded, source):
+        raise ValueError("Artifact did not reconstruct the supplied input")
     return len(source), len(encoded), sha256(source).hexdigest()
 
 
@@ -214,7 +234,7 @@ def main():
     parser.add_argument("--baseline", required=True, help="baseline config ID")
     parser.add_argument("--ratio-weight-bps", type=int, default=5000)
     parser.add_argument("--artifact", action="append", nargs=3, default=[],
-                        metavar=("OBS_ID", "SOURCE", "GZIP"))
+                        metavar=("OBS_ID", "SOURCE", "ARTIFACT"))
     args = parser.parse_args()
     try:
         result = score(args.path, args.baseline, args.ratio_weight_bps, args.artifact)
