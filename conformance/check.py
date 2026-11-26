@@ -1,72 +1,25 @@
 """Check the experimental schema, metric and codec vectors."""
 import argparse
-from decimal import Decimal
 import gzip
-import json
 import math
 from pathlib import Path
 import subprocess
 import zlib
 
-from jsonschema import Draft202012Validator
+if __package__:
+    from .verify_evidence import strict_json, validator, verify_records
+else:
+    from verify_evidence import strict_json, validator, verify_records
 
 
 HERE = Path(__file__).resolve().parent
-
-
-def reject_constant(value):
-    raise ValueError(f"Non-JSON constant: {value}")
-
-
-def unique_pairs(pairs):
-    result = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError(f"Duplicate property: {key}")
-        result[key] = value
-    return result
-
-
-def evidence_number(raw):
-    number = Decimal(raw)
-    if number == number.to_integral_value() and abs(number) <= 9007199254740991:
-        return int(number)
-    return number
-
-
-def strict_json(raw, *, evidence=False):
-    return json.loads(raw, parse_constant=reject_constant, object_pairs_hook=unique_pairs,
-                      parse_float=evidence_number if evidence else None)
 
 
 def load(path):
     return strict_json(path.read_text(encoding="utf-8"))
 
 
-def validation_consistent(observation, validation):
-    if validation is None:
-        return "validation_ref" not in observation
-    if (observation.get("validation_ref") != validation["validation_id"]
-            or observation["run_id"] != validation["run_id"]
-            or observation["observation_id"] != validation["observation_id"]):
-        return False
-    count = (observation["invocation_count"] if validation["cadence"] == "every_invocation"
-             else 1)
-    return validation["checked_invocations"] == count
-
-
-def qualifies(observation, validation):
-    return (observation["phase"] == "measurement" and observation["status"] == "ok"
-            and validation is not None and validation["status"] == "verified"
-            and validation["checked_invocations"] == observation["invocation_count"])
-
-
 def schema_cases(vectors):
-    validators = {}
-    for name in ("observation", "validation"):
-        schema = load(HERE.parent / "schemas" / f"{name}.schema.json")
-        Draft202012Validator.check_schema(schema)
-        validators[name] = Draft202012Validator(schema)
     for vector in vectors["records"]:
         observation = dict(vectors["observation"], **vector.get("change_observation", {}))
         validation = dict(vectors["validation"], **vector.get("change_validation", {}))
@@ -74,12 +27,13 @@ def schema_cases(vectors):
             del observation[key]
         if vector.get("no_validation"):
             validation = None
-        valid = (validators["observation"].is_valid(observation)
-                 and (validation is None or validators["validation"].is_valid(validation)))
-        if valid:
-            valid = validation_consistent(observation, validation)
-        actual = "invalid" if not valid else (
-            "qualified" if qualifies(observation, validation) else "unqualified")
+        try:
+            records = [observation, validation] if validation is not None else [observation]
+            (verdict,) = verify_records(records)
+        except ValueError:
+            actual = "invalid"
+        else:
+            actual = "qualified" if verdict["qualified"] else "unqualified"
         require_equal(vector, actual)
     for vector in vectors["json"]:
         try:
@@ -91,8 +45,12 @@ def schema_cases(vectors):
         require_equal(vector, actual)
     for vector in vectors["numeric_wire"]:
         observation = dict(vectors["observation"])
-        observation["elapsed_ns"] = strict_json(vector["raw"], evidence=True)
-        require_equal(vector, "valid" if validators["observation"].is_valid(observation) else "invalid")
+        try:
+            observation["elapsed_ns"] = strict_json(vector["raw"], evidence=True)
+            valid = validator("observation").is_valid(observation)
+        except ValueError:
+            valid = False
+        require_equal(vector, "valid" if valid else "invalid")
     return len(vectors["records"]) + len(vectors["json"]) + len(vectors["numeric_wire"])
 
 

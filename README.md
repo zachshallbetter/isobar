@@ -136,7 +136,7 @@ Pareto analysis will identify configurations that cannot be improved in one sele
 
 Identifiers are provisional. Specifications will be independently versioned, with documented compatibility and change policies.
 
-The [research ledger](research/README.md) links to pinned source reviews and reproduced findings. The [experimental conformance suite](conformance/README.md) exercises draft evidence schemas, scoring and gzip/Zstandard artifact vectors. The [trusted local worker](worker/README.md) runs a single in-memory gzip measurement with exact reconstruction and a worker timeout.
+The [research ledger](research/README.md) links to pinned source reviews and reproduced findings. The [experimental conformance suite](conformance/README.md) exercises draft evidence schemas, scoring and gzip/Zstandard artifact vectors. The [trusted local worker](worker/README.md) runs a single in-memory gzip measurement with exact reconstruction and a worker timeout. It can emit [experimental IBS-0003 evidence](conformance/README.md#verify-worker-evidence) for independent verification.
 
 ## CLI design
 
