@@ -32,3 +32,31 @@ gem install json_schemer --version 2.4.0
 ruby conformance/verify_evidence.rb /tmp/isobar-example.jsonl
 /tmp/isobar-conformance/bin/python -B -m unittest -v worker.test_measure conformance.test_evidence
 ```
+
+## Verify whole gzip and Zstandard artifacts
+
+The artifact checker runs each of the 11 existing format vectors through its candidate and reference paths. Use Python 3.10 or later and trusted local shared builds of [libdeflate 1.25](https://github.com/ebiggers/libdeflate/tree/c8c56a20f8f621e6a966b716b31f1dedab6a41e3) and [Zstandard 1.5.7](https://github.com/facebook/zstd/tree/f8745da6ff1ad1e7bab384bd1f9d742439278e99). From the respective source trees, build libdeflate with CMake and Zstandard with Make.
+
+```sh
+# In the libdeflate source tree
+cmake -B build -DLIBDEFLATE_BUILD_GZIP=OFF -DLIBDEFLATE_BUILD_STATIC_LIB=OFF
+cmake --build build
+
+# In the Zstandard source tree
+make -C lib libzstd
+```
+
+From the Isobar root, point the commands at the shared libraries. The example uses macOS filenames. Use the corresponding `.so` files on Linux.
+
+```sh
+export ISOBAR_LIBDEFLATE=/path/to/libdeflate/build/libdeflate.dylib
+export ISOBAR_ZSTD_LIB=/path/to/zstd/lib/libzstd.dylib
+python3 -B -m conformance.check_artifacts --libdeflate "$ISOBAR_LIBDEFLATE" --zstd-lib "$ISOBAR_ZSTD_LIB"
+python3 -B -m unittest -v conformance.test_artifacts
+```
+
+The gzip candidate is the worker's per-member zlib path. The gzip reference uses libdeflate. Zstandard uses streaming and frame-by-frame one-shot paths in the same libzstd build. These are separate adapter paths with a shared implementation. The original conformance command still checks the Zstandard CLI.
+
+Each diagnostic records the adapter build, terminal status, compressed input length, actual consumption when available, the last completed boundary and the number of output bytes observed. A rejection exposes no accepted output. A missing consumed count means the failing API did not report it. The completed prefix remains visible.
+
+Local bounds are 2 MiB compressed and 1 MiB decoded. The Zstandard streaming path also caps its window at 1 MiB. The one-shot reference writes to a bounded output buffer. These limits describe the local fixture runner. HTTP content encoding has its own requirements under [RFC 9659](https://datatracker.ietf.org/doc/html/rfc9659).

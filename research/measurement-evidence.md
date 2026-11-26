@@ -45,3 +45,20 @@ Omitted share is `(whole_ns − write_ns) / whole_ns`, summarized as the median 
 ## Open questions
 
 Upstream fixtures cover selected source paths. Full runner behavior on real corpora, multithreaded validation, Windows/Linux probe semantics, uncertainty calibration, imported provenance, production worker containment and artifact signing remain open. The formats exercised here are gzip and Zstandard. Corpus redistribution rights and dictionary training/evaluation policy still need separate evidence.
+
+## Whole-artifact adapter checks
+
+All 11 format vectors ran through both roles on ARM64 macOS. The gzip candidate used CPython 3.13.18 with zlib 1.2.12. The gzip reference used libdeflate 1.25 at `c8c56a20f8f621e6a966b716b31f1dedab6a41e3`. The Zstandard streaming candidate and one-shot reference used the same libzstd 1.5.7 build at `f8745da6ff1ad1e7bab384bd1f9d742439278e99`. Both shared libraries were compiled with Apple clang 21.0.0. The checker emits SHA-256 digests of the native libraries and the CPython zlib binding for each run. The binding digest identifies the Python extension, and the linked zlib is identified by runtime version.
+
+| Artifact | Role | Terminal status | Consumed bytes | Completed bytes | Observed decoded bytes |
+| --- | --- | --- | ---: | ---: | ---: |
+| Two gzip members, 42 bytes | Both | Complete | 42 | 42 | 2 |
+| Gzip with truncated second member, 41 bytes | Candidate | Rejected | 41 | 21 | 2 |
+| Gzip with truncated second member, 41 bytes | Reference | Rejected | Unavailable | 21 | 1 |
+| Two Zstandard data frames with skippable metadata, 31 bytes | Both | Complete | 31 | 31 | 2 |
+| Zstandard with truncated second frame, 19 bytes | Candidate | Rejected | 19 | 10 | 1 |
+| Zstandard with truncated second frame, 19 bytes | Reference | Rejected | Unavailable | 10 | 1 |
+
+The candidate gzip path produced both payload bytes before finding the incomplete second trailer. Both streaming candidates consumed the entire truncated input and still rejected it. The reference paths retain the last completed unit and report unavailable total consumption on a failed call. Their APIs report successful per-member input consumption or a complete frame extent. [libdeflate API](https://github.com/ebiggers/libdeflate/blob/c8c56a20f8f621e6a966b716b31f1dedab6a41e3/libdeflate.h#L288-L314) · [gzip trailer checks](https://github.com/ebiggers/libdeflate/blob/c8c56a20f8f621e6a966b716b31f1dedab6a41e3/lib/gzip_decompress.c#L102-L132) · [Zstandard frame extent](https://github.com/facebook/zstd/blob/f8745da6ff1ad1e7bab384bd1f9d742439278e99/lib/zstd.h#L216-L227) · [Zstandard streaming semantics](https://github.com/facebook/zstd/blob/f8745da6ff1ad1e7bab384bd1f9d742439278e99/lib/zstd.h#L926-L948).
+
+The additional tests check empty artifacts and empty payloads, gzip members with an empty member in the chain, leading and trailing skippable frames, truncated skippable headers and payloads, multiple output-buffer flushes, and the local limits. The source and observations cover these fixtures and build paths. Wider format coverage and additional independent Zstandard implementations remain open. [Reproduction commands](../conformance/README.md#verify-whole-gzip-and-zstandard-artifacts).

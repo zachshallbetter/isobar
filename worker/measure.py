@@ -15,8 +15,13 @@ import tempfile
 import time
 import zlib
 
+if __package__:
+    from .artifact import MAX_DECODED_BYTES, decode_gzip
+else:
+    from artifact import MAX_DECODED_BYTES, decode_gzip
 
-MAX_INPUT_BYTES = 1024 * 1024
+
+MAX_INPUT_BYTES = MAX_DECODED_BYTES
 MAX_REPORT_BYTES = 4096
 DEFAULT_INPUT = b"Isobar single-invocation fixture\n"
 UNQUALIFIED_EXIT = 3
@@ -123,7 +128,7 @@ def encode_gzip(data, *, stream_factory=gzip.GzipFile):
     return sink.getvalue()
 
 
-def measure(data, *, clock=time.perf_counter_ns, encode=encode_gzip, decode=gzip.decompress):
+def measure(data, *, clock=time.perf_counter_ns, encode=encode_gzip, decode=decode_gzip):
     started = clock()
     artifact = encode(data)
     elapsed = clock() - started
