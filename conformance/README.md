@@ -60,3 +60,17 @@ The gzip candidate is the worker's per-member zlib path. The gzip reference uses
 Each diagnostic records the adapter build, terminal status, compressed input length, actual consumption when available, the last completed boundary and the number of output bytes observed. A rejection exposes no accepted output. A missing consumed count means the failing API did not report it. The completed prefix remains visible.
 
 Local bounds are 2 MiB compressed and 1 MiB decoded. The Zstandard streaming path also caps its window at 1 MiB. The one-shot reference writes to a bounded output buffer. These limits describe the local fixture runner. HTTP content encoding has its own requirements under [RFC 9659](https://datatracker.ietf.org/doc/html/rfc9659).
+
+## Replay qualified scoring
+
+The Python scorer and independent Ruby verifier use the evidence readers above. Replay throughput from an existing qualified run with the compression ratio disabled.
+
+```sh
+/tmp/isobar-conformance/bin/python -B -m conformance.scoring research/experiments/blocked-macos.jsonl --baseline reference --ratio-weight-bps 0
+ruby conformance/score_evidence.rb research/experiments/blocked-macos.jsonl --baseline reference --ratio-weight-bps 0
+/tmp/isobar-conformance/bin/python -B -m unittest -v conformance.test_scoring
+```
+
+The default assigns 5,000 basis points each to ratio and throughput. To score ratio, repeat `--artifact OBS_ID ORIGINAL_PATH GZIP_PATH` once per invocation in the observation. The scorer checks each supplied gzip artifact against its original and compares input contents across complete artifact sets in a matched slot. The archived timing records lack artifact sizes, so replaying them with ratio enabled reports a missing metric. Set `--ratio-weight-bps 10000` for ratio-only ranking.
+
+The readers report exact totals, rational metrics, observation references, versioned tie rules and the experimental qualification result. Python uses binary64 logarithms. Ruby independently uses decimal logarithms and exact rationals. Executable checks compare exact reported data and allow a relative tolerance of `1e-12` for the composite. See the [IBS-0004 replay profile](../specifications/IBS-0004.md#experimental-replay-from-evidence) for the applicability and publication rules.

@@ -4,12 +4,14 @@ import gzip
 import math
 from pathlib import Path
 import subprocess
+import sys
 import zlib
 
-if __package__:
-    from .verify_evidence import strict_json, validator, verify_records
-else:
-    from verify_evidence import strict_json, validator, verify_records
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from conformance.scoring import composite, positive
+from conformance.verify_evidence import strict_json, validator, verify_records
 
 
 HERE = Path(__file__).resolve().parent
@@ -52,33 +54,6 @@ def schema_cases(vectors):
             valid = False
         require_equal(vector, "valid" if valid else "invalid")
     return len(vectors["records"]) + len(vectors["json"]) + len(vectors["numeric_wire"])
-
-
-def positive(value):
-    return type(value) in (int, float) and math.isfinite(value) and value > 0
-
-
-def composite(metrics):
-    weights = [metric["weight"] for metric in metrics]
-    if (any(not math.isfinite(weight) or weight < 0 for weight in weights)
-            or not math.isclose(math.fsum(weights), 1, rel_tol=0, abs_tol=1e-12)):
-        return "invalid_weights"
-    terms = []
-    for metric in metrics:
-        weight = metric["weight"]
-        if weight == 0:
-            continue
-        x, reference = metric.get("candidate"), metric.get("reference")
-        if not positive(x) or not positive(reference):
-            return "unavailable"
-        log_ratio = math.log(x) - math.log(reference)
-        direction = {"max": 1, "min": -1}[metric["direction"]]
-        terms.append(direction * weight * log_ratio)
-    try:
-        score = math.exp(math.log(100) + math.fsum(terms))
-    except OverflowError:
-        return "out_of_range"
-    return score if score > 0 else "out_of_range"
 
 
 def weissman(reference_time, candidate_time):
