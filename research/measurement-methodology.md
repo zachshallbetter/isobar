@@ -1,10 +1,10 @@
 # Measurement methodology and validation plan
 
-Status: initial literature review and proposed requirements. No timing experiments have been run.
+Status: proposed measurement program. The [experimental evidence report](measurement-evidence.md) records the completed gzip boundary pilot, selected upstream reproductions and subsequent literature review.
 
 ## Literature and corpus references
 
-- Kalibera and Jones, *Rigorous benchmarking in reasonable time* (2013), [DOI 10.1145/2464157.2464160](https://doi.org/10.1145/2464157.2464160). Abstract reviewed: systems experiments require repetition at relevant levels and variation estimates. Full paper and statistical procedure remain to be reviewed.
+- Kalibera and Jones, *Rigorous benchmarking in reasonable time* (2013), [DOI 10.1145/2464157.2464160](https://doi.org/10.1145/2464157.2464160). Systems experiments require repetition at relevant levels and variation estimates. See the follow-up report for sections reviewed and remaining estimator choices.
 - [Canterbury Corpus](https://corpus.canterbury.ac.nz/), official landing page reviewed: established lossless evaluation files and results. Verify per-file provenance, licensing and hashes before redistribution.
 - [Silesia Corpus](https://sun.aei.polsl.pl/~sdeor/index.php?page=silesia), candidate corpus; source and licenses not yet reviewed.
 - lzbench and TurboBench documentation: see existing-tools.md for snapshots.
@@ -36,4 +36,4 @@ Start with deterministic synthetic fixtures (empty, tiny, repeated, structured a
 
 ## Open questions
 
-Select statistical estimators and hierarchical repetition model after literature review; determine platform-specific CPU/memory/energy probe semantics; define comparable memory measures; specify threat model for third-party adapters; review corpus rights; choose baseline implementations and versioning; test actual upstream code. These are prerequisites for normative IBS drafts, not resolved decisions.
+Select statistical estimators and hierarchical repetition model after literature review; determine platform-specific CPU/memory/energy probe semantics; define comparable memory measures; specify threat model for third-party adapters; review corpus rights; choose baseline implementations and versioning; exercise complete upstream runners and additional adapter paths. These are prerequisites for normative IBS drafts.

@@ -136,6 +136,8 @@ Pareto analysis will identify configurations that cannot be improved in one sele
 
 Identifiers are provisional. Specifications will be independently versioned, with documented compatibility and change policies.
 
+The [research ledger](research/README.md) links to pinned source reviews and reproduced findings. The [experimental conformance suite](conformance/README.md) exercises draft evidence schemas, scoring and gzip/Zstandard artifact vectors. These fixtures are available during the specification phase.
+
 ## CLI design
 
 The following examples illustrate the intended interface. **These commands are not available yet.**
