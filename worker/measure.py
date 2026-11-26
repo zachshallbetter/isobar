@@ -121,9 +121,9 @@ def evidence_records(result, run_id, phase):
     yield observation
 
 
-def encode_gzip(data, *, stream_factory=gzip.GzipFile):
+def encode_gzip(data, *, level=6, stream_factory=gzip.GzipFile):
     sink = io.BytesIO()
-    with stream_factory(fileobj=sink, mode="wb", compresslevel=6, mtime=0) as stream:
+    with stream_factory(fileobj=sink, mode="wb", compresslevel=level, mtime=0) as stream:
         stream.write(data)
     return sink.getvalue()
 
