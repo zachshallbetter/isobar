@@ -1,5 +1,6 @@
 """Executable tests for the trusted local worker."""
 import gzip
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -102,27 +103,29 @@ class WorkerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as scratch:
             for data in samples:
                 with self.subTest(input_bytes=len(data)):
-                    qualified, report = measure.run_worker(COMMAND, data, timeout=5,
-                                                           scratch_root=scratch)
-                    self.assertTrue(qualified, report)
-                    self.assertIn("status=ok validation=verified qualified=true", report)
-                    self.assertIn(f"input_bytes={len(data)} ", report)
-                    self.assertIn("sequence=1 invocation_count=1", report)
+                    result = measure.run_worker(COMMAND, data, timeout=5,
+                                                scratch_root=scratch)
+                    self.assertTrue(result.qualified, result.report())
+                    self.assertIn("status=ok validation=verified qualified=true", result.report())
+                    self.assertIn(f"input_bytes={len(data)} ", result.report())
+                    self.assertIn("sequence=1 invocation_count=1", result.report())
                     self.assertEqual(list(Path(scratch).iterdir()), [])
 
     def test_worker_retains_measurement_for_completed_mismatch(self):
-        statement = ("print('status=ok validation=mismatch qualified=false elapsed_ns=5'); "
-                     f"raise SystemExit({measure.UNQUALIFIED_EXIT})")
-        qualified, report = measure.run_worker([sys.executable, "-c", statement], b"", timeout=5)
-        self.assertFalse(qualified)
-        self.assertIn("status=ok validation=mismatch qualified=false elapsed_ns=5", report)
+        report = json.dumps([5, 0, 20, "mismatch"])
+        statement = f"print({report!r}); raise SystemExit({measure.UNQUALIFIED_EXIT})"
+        result = measure.run_worker([sys.executable, "-c", statement], b"", timeout=5)
+        self.assertFalse(result.qualified)
+        self.assertIn("status=ok validation=mismatch qualified=false", result.report())
+        self.assertEqual(result.trial.elapsed_ns, 5)
 
     def test_worker_exit_discards_even_complete_looking_partial_report(self):
-        command = [sys.executable, "-c", "print('status=ok qualified=true'); raise SystemExit(9)"]
-        qualified, report = measure.run_worker(command, b"", timeout=5)
-        self.assertFalse(qualified)
-        self.assertIn("status=error qualified=false exit_code=9", report)
-        self.assertNotIn("status=ok", report)
+        report = json.dumps([5, 0, 20, "verified"])
+        command = [sys.executable, "-c", f"print({report!r}); raise SystemExit(9)"]
+        result = measure.run_worker(command, b"", timeout=5)
+        self.assertFalse(result.qualified)
+        self.assertIn("status=error qualified=false exit_code=9", result.report())
+        self.assertNotIn("status=ok", result.report())
 
     def test_timeout_discards_report_and_terminates_worker_and_child(self):
         import fcntl
@@ -143,16 +146,16 @@ class WorkerTests(unittest.TestCase):
             outside = textwrap.dedent("""
                 import subprocess, sys, time
                 subprocess.Popen([sys.executable, '-c', sys.argv[1], sys.argv[2]])
-                print('status=ok qualified=true', flush=True)
+                print('[5, 0, 20, "verified"]', flush=True)
                 time.sleep(60)
                 """)
             command = [sys.executable, "-c", outside, inside, str(lock_path)]
-            qualified, report = measure.run_worker(command, b"", timeout=2, scratch_root=scratch)
-            self.assertFalse(qualified)
-            self.assertIn("status=timeout qualified=false", report)
-            self.assertNotIn("status=ok", report)
+            result = measure.run_worker(command, b"", timeout=2, scratch_root=scratch)
+            self.assertFalse(result.qualified)
+            self.assertIn("status=timeout qualified=false", result.report())
+            self.assertNotIn("status=ok", result.report())
             self.assertEqual(list(scratch.iterdir()), [])
-            pid = int(report.split()[0].split("=")[1])
+            pid = result.pid
             with self.assertRaises(ChildProcessError):
                 os.waitpid(pid, os.WNOHANG)
             self.assertGreater(int(lock_path.read_text()), 0)
@@ -195,21 +198,22 @@ class WorkerTests(unittest.TestCase):
     def test_invalid_report_is_an_error(self):
         for statement in (
             "pass",
-            "print('status=ok validation=verified qualified=true ' + 'x' * 4096)",
-            "print('status=ok validation=mismatch qualified=false sequence=1')",
+            "print('x' * 4097)",
+            f"print({json.dumps([5, 0, 20, 'mismatch'])!r})",
+            f"print({json.dumps([5, 2, 20, 'verified'])!r})",
         ):
             with self.subTest(statement=statement):
                 command = [sys.executable, "-c", statement]
-                qualified, report = measure.run_worker(command, b"", timeout=5)
-                self.assertFalse(qualified)
-                self.assertIn("reason=invalid_worker_report", report)
+                result = measure.run_worker(command, b"", timeout=5)
+                self.assertFalse(result.qualified)
+                self.assertIn("reason=invalid_worker_report", result.report())
 
     def test_launch_failure_is_an_error(self):
         with tempfile.TemporaryDirectory() as scratch:
             command = [str(Path(scratch) / "missing-worker")]
-            qualified, report = measure.run_worker(command, b"", timeout=5, scratch_root=scratch)
-            self.assertFalse(qualified)
-            self.assertIn("reason=worker_launch_failed", report)
+            result = measure.run_worker(command, b"", timeout=5, scratch_root=scratch)
+            self.assertFalse(result.qualified)
+            self.assertIn("reason=worker_launch_failed", result.report())
             self.assertEqual(list(Path(scratch).iterdir()), [])
 
     def test_oversized_input_never_launches_worker(self):
