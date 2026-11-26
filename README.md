@@ -4,7 +4,7 @@
 
 An independent, open-source testing framework for lossless compression, codecs, archive formats, and their implementations.
 
-> **Project status: pre-alpha / specification phase.** This repository is being established. The architecture, commands, scoring profiles, and capabilities described below are proposals, not claims of implemented functionality or published benchmark results.
+> **Project status: pre-alpha.** The trusted local gzip worker and conformance fixtures are available. The broader CLI, benchmark suites and scoring profiles are proposals.
 
 ## Why Isobar?
 
@@ -136,11 +136,11 @@ Pareto analysis will identify configurations that cannot be improved in one sele
 
 Identifiers are provisional. Specifications will be independently versioned, with documented compatibility and change policies.
 
-The [research ledger](research/README.md) links to pinned source reviews and reproduced findings. The [experimental conformance suite](conformance/README.md) exercises draft evidence schemas, scoring and gzip/Zstandard artifact vectors. These fixtures are available during the specification phase.
+The [research ledger](research/README.md) links to pinned source reviews and reproduced findings. The [experimental conformance suite](conformance/README.md) exercises draft evidence schemas, scoring and gzip/Zstandard artifact vectors. The [trusted local worker](worker/README.md) runs a single in-memory gzip measurement with exact reconstruction and a worker timeout.
 
 ## CLI design
 
-The following examples illustrate the intended interface. **These commands are not available yet.**
+The prototype runs with `python3 -B worker/measure.py`. The proposed CLI below describes the broader interface.
 
 ```sh
 isobar corpus fetch silesia canterbury
