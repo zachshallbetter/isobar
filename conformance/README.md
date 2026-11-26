@@ -97,7 +97,7 @@ python3 -B -m conformance.scoring /path/to/bundle/observations.jsonl --baseline 
 ruby conformance/score_evidence.rb /path/to/bundle/observations.jsonl --baseline gzip-6 --verify-bundle
 ```
 
-Both scorers check the saved plan against all observed slots, including warm-ups, and reconcile invocation positions, input, bytes and elapsed times. They verify the checksummed metadata and each artifact before decoding the same bytes. This mode uses `manifest.json`, `input.bin`, `invocations.jsonl`, `observations.jsonl` and the per-artifact entries in `checksums.sha256`. Supply the checksum list from the original capture through a trusted channel. The check detects changes relative to that list. Plain JSONL and explicit `--artifact` replay remain available for historical evidence with caller-supplied bindings.
+Both scorers check the saved plan against all observed slots, including warm-ups, and reconcile invocation positions, input, bytes and elapsed times. They verify the checksummed metadata and each artifact before decoding the same bytes. This mode uses `manifest.json`, `input.bin`, `invocations.jsonl`, `observations.jsonl` and the per-artifact entries in `checksums.sha256`. The checksum list accepts LF and CRLF line endings and an optional `./` path prefix. Bare carriage returns are invalid. Supply the checksum list from the original capture through a trusted channel. The check detects changes relative to that list. Plain JSONL and explicit `--artifact` replay remain available for historical evidence with caller-supplied bindings.
 
 ## Inspect pinned upstream reports
 

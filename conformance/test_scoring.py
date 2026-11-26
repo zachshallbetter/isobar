@@ -248,6 +248,32 @@ class ScoringTests(unittest.TestCase):
             encoding="utf-8",
         )
 
+    def test_bundle_checksum_line_endings_and_dot_prefix_agree_across_readers(self):
+        files = self.write_bundle()
+        self.write_bundle_checksums(files)
+        checksums = self.root / "checksums.sha256"
+        lines = checksums.read_bytes().split(b"\n")[:-1]
+        options = dict(path=self.evidence, pairs=("--verify-bundle",))
+        expected = self.compare(**options)
+        self.assertEqual(expected["status"], "complete")
+
+        for prefix in (b"", b"./"):
+            entries = [digest + b"  " + prefix + path
+                       for digest, path in (line.split(b"  ", 1) for line in lines)]
+            for separator in (b"\n", b"\r\n"):
+                with self.subTest(prefix=prefix, separator=separator):
+                    checksums.write_bytes(separator.join(entries) + separator)
+                    self.assertEqual(self.compare(**options), expected)
+
+        for data in (b"\r".join(lines) + b"\r", b"\n".join(lines) + b"\r",
+                     b"\n".join(lines)):
+            with self.subTest(ending=data[-10:]):
+                checksums.write_bytes(data)
+                if data.endswith(b"\r"):
+                    self.compare(**options, invalid="Invalid bundle checksum entry")
+                else:
+                    self.assertEqual(self.compare(**options), expected)
+
     def test_bundle_rejects_missing_matched_block_with_consistent_checksums(self):
         files = self.write_bundle()
         self.write_bundle_checksums(files)

@@ -12,7 +12,7 @@ class ReplayBundle
     @root = File.realpath(File.dirname(path))
     @checksums = {}
     read_file("checksums.sha256").each_line do |line|
-      entry = /\A([0-9a-f]{64})  (?:\.\/)?([A-Za-z0-9._\/-]+)\z/.match(line.chomp)
+      entry = /\A([0-9a-f]{64})  (?:\.\/)?([A-Za-z0-9._\/-]+)(?:\r?\n)?\z/.match(line)
       raise InvalidEvidence, "Invalid bundle checksum entry" unless entry
 
       digest, name = entry.captures

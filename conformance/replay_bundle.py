@@ -9,7 +9,7 @@ from .verify_evidence import MAX_COUNTER, strict_json
 
 
 MAX_METADATA_BYTES = 8 * 1024 * 1024
-CHECKSUM_ENTRY = re.compile(r"([0-9a-f]{64})  (?:\./)?([A-Za-z0-9._/-]+)")
+CHECKSUM_ENTRY = re.compile(r"([0-9a-f]{64})  (?:\./)?([A-Za-z0-9._/-]+)(?:\r?\n)?")
 ARTIFACT_PATH = re.compile(r"artifacts/[A-Za-z0-9_.-]+")
 
 
@@ -23,7 +23,8 @@ class ReplayBundle:
             raise ValueError("Bundle replay requires observations.jsonl")
         self.root = observations_path.parent.resolve(strict=True)
         self.checksums = {}
-        for line in self.read("checksums.sha256").decode("utf-8").splitlines():
+        text = self.read("checksums.sha256").decode("utf-8")
+        for line in StringIO(text, newline="\n"):
             entry = CHECKSUM_ENTRY.fullmatch(line)
             if not entry:
                 raise ValueError("Invalid bundle checksum entry")
