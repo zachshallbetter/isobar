@@ -5,6 +5,7 @@ Updated 2026-11-26. This ledger indexes source reviews, reproductions, measured 
 - [Existing tools and source review](existing-tools.md)
 - [Runner and ranking source review](runner-source-review.md)
 - [Measurement and conformance evidence](measurement-evidence.md)
+- [Pinned upstream aggregate imports](measurement-evidence.md#aggregate-report-imports)
 - [Executable upstream fixtures and raw observations](experiments/README.md)
 - [Experimental conformance vectors and evidence schemas](../conformance/README.md)
 - [Architecture decisions under review](../specifications/measurement-decisions.md)

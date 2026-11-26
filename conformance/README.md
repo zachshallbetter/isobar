@@ -14,6 +14,21 @@ Pass the absolute path to the built binary with `--zstd` if it is not on PATH. T
 
 Structural schema checks, semantic reference checks and measurement qualification are separate assertions. The measurement records use opaque fixture identifiers. They do not define a run identity or a hash canonicalization scheme.
 
+## Run the complete local suite
+
+Set up the Python and Ruby dependencies, native libraries, and pinned report inputs described below. From the repository root, set `upstream` to the [pinned source checkout directory](../research/experiments/README.md).
+
+```sh
+: "${ISOBAR_LIBDEFLATE:?Set the libdeflate path}" "${ISOBAR_ZSTD_LIB:?Set the libzstd path}"
+: "${ISOBAR_LZBENCH_REPORT_DIR:?Set the lzbench report directory}" "${ISOBAR_TURBOBENCH_REPORT:?Set the pinned TurboBench report path}"
+: "${upstream:?Set the pinned source checkout directory}"
+/tmp/isobar-conformance/bin/python -B -m unittest discover -v
+/tmp/isobar-conformance/bin/python -B conformance/check.py --zstd /path/to/zstd
+/tmp/isobar-conformance/bin/python -B research/experiments/upstream.py "$upstream"
+```
+
+The dependency checks keep the pinned-report tests enabled and surface missing library paths before discovery. The vector checker and upstream reproducer run separately from the unit suite.
+
 ## Verify worker evidence
 
 Install the Python dependency above. Run the reader against an experimental IBS-0003 JSONL file.
@@ -74,3 +89,48 @@ ruby conformance/score_evidence.rb research/experiments/blocked-macos.jsonl --ba
 The default assigns 5,000 basis points each to ratio and throughput. To score ratio, repeat `--artifact OBS_ID ORIGINAL_PATH GZIP_PATH` once per invocation in the observation. The scorer checks each supplied gzip artifact against its original and compares input contents across complete artifact sets in a matched slot. The archived timing records lack artifact sizes, so replaying them with ratio enabled reports a missing metric. Set `--ratio-weight-bps 10000` for ratio-only ranking.
 
 The readers report exact totals, rational metrics, observation references, versioned tie rules and the experimental qualification result. Python uses binary64 logarithms. Ruby independently uses decimal logarithms and exact rationals. Executable checks compare exact reported data and allow a relative tolerance of `1e-12` for the composite. See the [IBS-0004 replay profile](../specifications/IBS-0004.md#experimental-replay-from-evidence) for the applicability and publication rules.
+
+## Inspect pinned upstream reports
+
+The importer reads a local file with a limit of 1 MiB. It emits a diagnostic JSON object that preserves aggregate rows and their provenance. The supported layouts are `lzbench-csv-v1` and `turbobench-markdown-v1`. An unknown layout or failed digest check produces an unavailable result and no rows. Ambiguous cells keep their displayed value and have no usable numeric value.
+
+From the Isobar root, extract the published TurboBench snapshot from a checkout containing the pinned commit. The checkout can remain on another revision.
+
+```sh
+turbo_commit=e15988f037f4255a818a3407bd09a00a2aa6052b
+git -C /path/to/TurboBench show "$turbo_commit:benchmark.md" > /tmp/isobar-turbobench-pinned.md
+python3 -B -m conformance.import_reports /tmp/isobar-turbobench-pinned.md \
+  --format turbobench-markdown-v1 --report-revision "$turbo_commit" \
+  --source-url "https://github.com/powturbo/TurboBench/blob/$turbo_commit/benchmark.md" \
+  --expected-sha256 be4afc9e683e7ab048c3a3d90cadfb5b782a7f4f8244acdf067b8171d83c3d6c
+```
+
+Use lzbench source at `4afc06fa5fa98f70f1c4185865349567da5d583f` to generate a fresh CSV without downloading a corpus. The timing cells vary on each run. Record the generated report digest if retaining a capture.
+
+```sh
+lz_source=/path/to/lzbench
+lz_build=$(mktemp -d)
+make -C "$lz_build" -f "$lz_source/Makefile" BUILD_ONLY=ZSTD
+awk 'BEGIN { for (i = 1; i <= 8192; i++) printf "isobar lzbench fixture %05d\n", i }' > "$lz_build/fixture.txt"
+(
+  cd "$lz_build" || exit
+  ./lzbench -V > version.txt
+  ./lzbench -o4 -p3 -x -t0,0 -i3,3 -ezstd,1,3 fixture.txt > speed.csv
+  ./lzbench -o4 -p3 -x -z -t0,0 -i3,3 -ezstd,1,3 fixture.txt > time.csv
+)
+python3 -B -m conformance.import_reports "$lz_build/speed.csv" \
+  --format lzbench-csv-v1 --producer-version 2.4.2 \
+  --producer-revision 4afc06fa5fa98f70f1c4185865349567da5d583f --declared-estimator median
+```
+
+The `--report-revision` identifies the published report snapshot. The `--producer-revision`, `--producer-version`, `--producer-sha256` and `--declared-estimator` describe externally established generator provenance. The importer never treats a report revision as proof of a binary revision.
+
+Run the synthetic and gate tests with the Python and Ruby dependencies above. Set both paths to enable the pin-specific integration tests.
+
+```sh
+export ISOBAR_LZBENCH_REPORT_DIR="$lz_build"
+export ISOBAR_TURBOBENCH_REPORT=/tmp/isobar-turbobench-pinned.md
+/tmp/isobar-conformance/bin/python -B -m unittest -v conformance.test_import_reports
+```
+
+See the [upstream import evidence](../research/measurement-evidence.md#aggregate-report-imports) for the observed layouts, source limits and fixture handling.
