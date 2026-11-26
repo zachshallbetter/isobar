@@ -39,3 +39,5 @@ A dominates B iff all selected comparable dimensions are no worse and at least o
 Source for historical implementation: [weissman.py](https://github.com/lorenzosaino/weissman-score/blob/f28197250f3dc7c42373665218892d21592de8f3/weissman.py#L130-L139); see existing-tools.md for inspected blob. Numerical examples are derived, not measured codec results.
 
 [Executable conformance vectors](../conformance/vectors.json) cover these cases, exact dominance with disabled dimensions, permutation invariance, and finite log-space cancellation when individual normalized ratios would overflow or underflow.
+
+The [experimental IBS-0004 replay](../specifications/IBS-0004.md#experimental-replay-from-evidence) exercises qualified evidence with exact aggregate counters, versioned tie rules and an independent Ruby calculation. The archived timing runs lack compressed artifact sizes. Throughput-only replay uses their observed counters directly, and ratio scoring uses separate gzip artifacts that pass whole-artifact verification.

@@ -67,7 +67,10 @@ def read_records(path)
 end
 
 def verify(path)
-  observations, validations = read_records(path)
+  verify_records(*read_records(path))
+end
+
+def verify_records(observations, validations)
   raise InvalidEvidence, "No observations" if observations.empty?
 
   checks = {}
@@ -99,14 +102,16 @@ def verify(path)
   end
 end
 
-if ARGV.length != 1
-  warn "Usage: ruby conformance/verify_evidence.rb PATH"
-  exit 2
-end
+if $PROGRAM_NAME == __FILE__
+  if ARGV.length != 1
+    warn "Usage: ruby conformance/verify_evidence.rb PATH"
+    exit 2
+  end
 
-begin
-  verify(ARGV.fetch(0)).each { |verdict| puts JSON.generate(verdict) }
-rescue InvalidEvidence, JSON::ParserError, EncodingError, SystemCallError => error
-  warn "Invalid evidence: #{error.message}"
-  exit 1
+  begin
+    verify(ARGV.fetch(0)).each { |verdict| puts JSON.generate(verdict) }
+  rescue InvalidEvidence, JSON::ParserError, EncodingError, SystemCallError => error
+    warn "Invalid evidence: #{error.message}"
+    exit 1
+  end
 end
