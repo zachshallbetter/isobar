@@ -152,6 +152,10 @@ def summarize(plan, records, work_per_invocation):
     validations = {}
     run_ids = set()
     for record in records:
+        if not isinstance(record, dict) or not {"run_id", "schema_version"} <= record.keys():
+            raise ValueError("Timing analysis requires IBS-0003 records")
+        if record["schema_version"] != SCHEMA_VERSION:
+            raise ValueError("Unsupported IBS-0003 record version")
         run_ids.add(record["run_id"])
         if "validation_id" in record:
             index, key = validations, record["validation_id"]
