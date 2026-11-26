@@ -1,6 +1,7 @@
 """Cross-check the experimental IBS-0004 scorers against qualified evidence."""
 from fractions import Fraction
 import gzip
+from hashlib import sha256
 import io
 import json
 import math
@@ -71,6 +72,8 @@ class ScoringTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 1, (reader, result.stdout, result.stderr))
                 self.assertEqual(result.stdout, "")
                 self.assertIn("Invalid scoring input:", result.stderr)
+                if isinstance(invalid, str):
+                    self.assertIn(invalid, result.stderr)
                 continue
             self.assertEqual(result.returncode, 0, (reader, result.stderr))
             results.append(json.loads(result.stdout))
@@ -204,6 +207,82 @@ class ScoringTests(unittest.TestCase):
         self.assertEqual(result["status"], "complete")
         self.assertEqual(result["scores"]["reference"]["artifact_bytes"], str(len(skip)))
         self.assertEqual(result["scores"]["reference"]["metrics"]["ratio"], {"reason": "undefined_ratio"})
+
+    def write_bundle(self):
+        plan, calls = [], []
+        artifacts = self.root / "artifacts"
+        artifacts.mkdir()
+        original = b"one fixture for both codecs"
+        (self.root / "input.bin").write_bytes(original)
+        self.evidence = self.root / "observations.jsonl"
+        for block in (1, 2):
+            for config in ("reference", "candidate"):
+                artifact = self.add_trial(config, block, original, 100)
+                row, validation = self.records[-2:]
+                seq = len(plan) + 1
+                key = f"w1-s{seq}"
+                plan.append(dict(worker=1, block=block, sequence=seq, phase="measurement", config=config))
+                row.update(observation_id=key, worker_id="worker-1", block_id=f"block-{block}",
+                           sequence=seq, input_id="fixture")
+                validation["observation_id"] = key
+                relative = f"artifacts/{key}-1.gz"
+                target = self.root / relative
+                target.write_bytes(artifact.read_bytes())
+                calls.append(dict(observation_id=key, invocation=1, artifact=relative,
+                                  work_bytes=len(original), elapsed_ns=100,
+                                  artifact_bytes=target.stat().st_size))
+        manifest = dict(run_id=self.records[0]["run_id"], plan=plan, fixture_bytes=len(original),
+                        fixture_sha256=sha256(original).hexdigest(), measurement_invocations_per_batch=1,
+                        warmup_invocations_per_batch=1)
+        (self.root / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+        invocation_path = self.root / "invocations.jsonl"
+        invocation_path.write_text("".join(json.dumps(row) + "\n" for row in calls), encoding="utf-8")
+        self.evidence.write_text("".join(json.dumps(row) + "\n" for row in self.records), encoding="utf-8")
+        return [self.evidence, invocation_path, self.root / "manifest.json", self.root / "input.bin",
+                *sorted(artifacts.iterdir())]
+
+    def write_bundle_checksums(self, files):
+        (self.root / "checksums.sha256").write_text(
+            "".join(f"{sha256(path.read_bytes()).hexdigest()}  {path.relative_to(self.root).as_posix()}\n"
+                    for path in files),
+            encoding="utf-8",
+        )
+
+    def test_bundle_rejects_missing_matched_block_with_consistent_checksums(self):
+        files = self.write_bundle()
+        self.write_bundle_checksums(files)
+        result = self.compare(path=self.evidence, pairs=("--verify-bundle",))
+        self.assertEqual(result["status"], "complete")
+        self.assertEqual(result["scores"]["reference"]["work_bytes"], str(2 * files[3].stat().st_size))
+
+        # The remaining observations still form a complete match between codecs.
+        self.evidence.write_text("".join(json.dumps(row) + "\n" for row in self.records[:4]),
+                                 encoding="utf-8")
+        calls = files[1].read_text(encoding="utf-8").splitlines(keepends=True)
+        files[1].write_text("".join(calls[:2]), encoding="utf-8")
+        self.write_bundle_checksums(files)
+        self.assertEqual(self.compare(path=self.evidence, ratio_bps=0)["status"], "complete")
+        self.compare(path=self.evidence, pairs=("--verify-bundle",), ratio_bps=0,
+                     invalid="Planned coverage mismatch")
+
+    def test_bundle_rejects_same_size_substitute_that_still_decodes(self):
+        files = self.write_bundle()
+        self.write_bundle_checksums(files)
+        self.assertEqual(self.compare(path=self.evidence, pairs=("--verify-bundle",))["status"], "complete")
+
+        artifact = files[-1]
+        original = files[3].read_bytes()
+        captured = artifact.read_bytes()
+        replacement = bytearray(captured)
+        replacement[4] ^= 1  # mtime, independent of the encoded payload and trailer
+        self.assertNotEqual(bytes(replacement), captured)
+        self.assertEqual(len(replacement), len(captured))
+        self.assertEqual(gzip.decompress(replacement), original)
+        artifact.write_bytes(replacement)
+        self.compare(path=self.evidence, pairs=("--verify-bundle",), invalid="Bundle digest mismatch: artifacts/")
+        artifact.write_bytes(captured)
+        self.write_bundle_checksums(files[:-1])
+        self.compare(path=self.evidence, pairs=("--verify-bundle",), invalid="Missing bundle digest: artifacts/")
 
     def test_empty_original_is_undefined_ratio_and_zero_throughput(self):
         self.add_trial("reference", 1, b"", 100)

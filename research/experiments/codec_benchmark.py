@@ -1,6 +1,7 @@
 """Local cross-codec encode pilot using the Isobar blocked design."""
 import argparse
 from dataclasses import asdict, replace
+from hashlib import sha256
 import json
 import math
 import os
@@ -82,11 +83,13 @@ def child(root, worker):
         records.extend(bt.batch_records(step, trials, root.name))
 
     # Keep filesystem writes outside all measured blocks in this worker.
+    artifact_digests = {}
     for path, artifact in artifacts:
         (root / path).write_bytes(artifact)
+        artifact_digests[path.as_posix()] = sha256(artifact).hexdigest()
     dump(root / f"worker-{worker:02}.json", {
         "worker": worker, "pid": os.getpid(), "clock_probe_ns": probes,
-        "records": records, "invocations": invocations,
+        "records": records, "invocations": invocations, "artifact_digests": artifact_digests,
     })
 
 
@@ -114,7 +117,7 @@ def capture(root):
         "score_profile": {"baseline": "gzip-6", "ratio_bps": 5000, "encode_throughput_bps": 5000},
     }
     dump(root / "manifest.json", manifest)
-    records, invocations = [], []
+    records, invocations, checksums = [], [], {}
     for worker in plans:
         proc = subprocess.Popen(
             [sys.executable, "-B", "-m", "research.experiments.codec_benchmark",
@@ -132,12 +135,16 @@ def capture(root):
             raise ValueError("Worker metadata disagrees with launched process")
         records.extend(saved["records"])
         invocations.extend(saved["invocations"])
+        checksums.update(saved["artifact_digests"])
     jsonl(root / "observations.jsonl", records)
     jsonl(root / "invocations.jsonl", invocations)
 
-    slots = {step.observation_id: step for steps in plans.values() for step in steps}
-    if {row["observation_id"] for row in records if "config_id" in row} != slots.keys():
-        raise ValueError("Worker evidence does not cover the fixed plan")
+    for name in ("manifest.json", "observations.jsonl", "invocations.jsonl", "input.bin"):
+        checksums[name] = digest(root / name)
+    (root / "checksums.sha256").write_text(
+        "".join(f"{checksum}  {path}\n" for path, checksum in sorted(checksums.items())),
+        encoding="utf-8",
+    )
 
     # Reuse the pre-existing timing analysis with the same roles and slot checks.
     roles = {config: role for role, config in CONFIGS.items()}
@@ -149,22 +156,10 @@ def capture(root):
     if timing["status"] != "complete":
         raise ValueError("The complete planned measurements did not qualify")
 
-    artifacts = []
-    for call in invocations:
-        step = slots[call["observation_id"]]
-        if step.phase != "measurement":
-            continue
-        path = root / call["artifact"]
-        if path.stat().st_size != call["artifact_bytes"]:
-            raise ValueError(f"Artifact size disagrees with the invocation record: {path.name}")
-        artifacts.append((step.observation_id, source, path))
-    python = score(root / "observations.jsonl", CONFIGS["reference"], 5000, artifacts)
+    python = score(root / "observations.jsonl", CONFIGS["reference"], 5000, [], verify_bundle=True)
     dump(root / "python-score.json", python)
     ruby_command = ["ruby", str(REPO / "conformance/score_evidence.rb"), "observations.jsonl",
-                    "--baseline", CONFIGS["reference"], "--ratio-weight-bps", "5000"]
-    for observation, original, artifact in artifacts:
-        ruby_command.extend(("--artifact", observation, str(original.relative_to(root)),
-                             str(artifact.relative_to(root))))
+                    "--baseline", CONFIGS["reference"], "--ratio-weight-bps", "5000", "--verify-bundle"]
     ruby = json.loads(subprocess.check_output(ruby_command, cwd=root, text=True, timeout=30))
     dump(root / "ruby-score.json", ruby)
 
@@ -178,7 +173,6 @@ def capture(root):
     if python != ruby:
         raise ValueError("Independent score replay disagrees")
     print(root)
-
 
 
 def main():

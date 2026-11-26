@@ -1,5 +1,6 @@
 # Independent IBS-0004 replay using exact Ruby rationals and decimal logarithms.
 require_relative "verify_evidence"
+require_relative "replay_bundle"
 require "bigdecimal"
 require "bigdecimal/math"
 require "digest"
@@ -74,6 +75,10 @@ end
 def artifact_counts(source_path, artifact_path)
   original = (File.binread(source_path, MAX_ORIGINAL + 1) || "".b)
   artifact = (File.binread(artifact_path, MAX_ARTIFACT + 1) || "".b)
+  decoded_counts(original, artifact)
+end
+
+def decoded_counts(original, artifact)
   if original.bytesize > MAX_ORIGINAL || artifact.bytesize > MAX_ARTIFACT
     raise InvalidEvidence, "Artifact or original exceeds the local format limits"
   end
@@ -145,12 +150,19 @@ def cohort_measurements(rows, supplied, source_digests)
   [{ ratio: ratio, throughput: throughput }, diagnostic]
 end
 
-def score_evidence(path, baseline, ratio_bps, artifacts)
+def score_evidence(path, baseline, ratio_bps, artifacts, verify_bundle: false)
   unless ratio_bps.between?(0, WEIGHT_TOTAL)
     raise InvalidEvidence, "Ratio weight must be between 0 and 10000 basis points"
   end
 
-  observations, validations = read_records(path)
+  if verify_bundle
+    raise InvalidEvidence, "Bundle replay uses the saved invocation artifacts" unless artifacts.empty?
+
+    bundle = ReplayBundle.new(path)
+    observations, validations = read_records(path, lines: bundle.observation_lines)
+  else
+    observations, validations = read_records(path)
+  end
   verdicts = verify_records(observations, validations)
   runs = verdicts.map { |verdict| verdict.fetch(:run_id) }.uniq
   raise InvalidEvidence, "Scoring requires one run" unless runs.one?
@@ -167,7 +179,12 @@ def score_evidence(path, baseline, ratio_bps, artifacts)
   end
   raise InvalidEvidence, "Baseline must name a measured configuration" unless groups.key?(baseline)
 
-  supplied = collect_artifacts(artifacts, measurements.to_h { |row| [row["observation_id"], row] }, qualified)
+  supplied = if bundle
+               by_id = observations.values.to_h { |row| [row["observation_id"], row] }
+               bundle.verify_invocations(by_id) { |original, artifact| decoded_counts(original, artifact) }
+             else
+               collect_artifacts(artifacts, measurements.to_h { |row| [row["observation_id"], row] }, qualified)
+             end
   configurations = groups.keys.sort
   weights = { ratio: ratio_bps, throughput: WEIGHT_TOTAL - ratio_bps }
   enabled = weights.keys.select { |metric| weights.fetch(metric).positive? }
@@ -226,10 +243,12 @@ if $PROGRAM_NAME == __FILE__
     baseline = nil
     weight = 5000
     artifacts = []
+    verify_bundle = false
     until ARGV.empty?
       case ARGV.shift
       when "--baseline" then baseline = ARGV.shift
       when "--ratio-weight-bps" then weight = Integer(ARGV.shift, 10)
+      when "--verify-bundle" then verify_bundle = true
       when "--artifact"
         pair = ARGV.shift(3)
         raise InvalidEvidence, "Expected observation ID, original and artifact path" unless pair.length == 3
@@ -240,7 +259,7 @@ if $PROGRAM_NAME == __FILE__
     end
     raise InvalidEvidence, "Expected evidence path and --baseline" unless path && baseline
 
-    puts JSON.generate(score_evidence(path, baseline, weight, artifacts))
+    puts JSON.generate(score_evidence(path, baseline, weight, artifacts, verify_bundle: verify_bundle))
   rescue InvalidEvidence, JSON::ParserError, EncodingError, SystemCallError, ArgumentError, TypeError => error
     warn "Invalid scoring input: #{error.message}"
     exit 1

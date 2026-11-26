@@ -34,7 +34,17 @@ class ExactCounter
   end
 end
 
-def read_records(path)
+def strict_json(line, decimal_class: nil)
+  raise InvalidEvidence, "Invalid UTF-8" unless line.valid_encoding?
+
+  # The Ruby parser accepts comments. Slashes outside JSON strings are invalid.
+  if line.gsub(/"(?:[^"\\]++|\\.)*+"/, "").include?("/")
+    raise InvalidEvidence, "Unexpected slash outside JSON string"
+  end
+  JSON.parse(line, allow_duplicate_key: false, decimal_class: decimal_class)
+end
+
+def read_records(path, lines: File.foreach(path, encoding: "UTF-8"))
   schema_dir = File.expand_path("../schemas", __dir__)
   schemas = %w[observation validation].to_h do |kind|
     schema_path = File.join(schema_dir, "#{kind}.schema.json")
@@ -42,14 +52,8 @@ def read_records(path)
   end
   observations = {}
   validations = {}
-  File.foreach(path, encoding: "UTF-8") do |line|
-    raise InvalidEvidence, "Invalid UTF-8" unless line.valid_encoding?
-
-    # The Ruby parser accepts comments. Slashes outside JSON strings are invalid.
-    if line.gsub(/"(?:[^"\\]++|\\.)*+"/, "").include?("/")
-      raise InvalidEvidence, "Unexpected slash outside JSON string"
-    end
-    record = JSON.parse(line, allow_duplicate_key: false, decimal_class: ExactCounter)
+  lines.each do |line|
+    record = strict_json(line, decimal_class: ExactCounter)
     kind = record.is_a?(Hash) && record.key?("validation_id") ? "validation" : "observation"
     raise InvalidEvidence, "Invalid #{kind} schema" unless schemas.fetch(kind).valid?(record)
 

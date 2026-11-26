@@ -12,6 +12,7 @@ import sys
 
 from worker.artifact import MAX_ARTIFACT_BYTES, MAX_DECODED_BYTES, gzip_members
 from worker.zstandard import Zstandard, is_zstandard
+from .replay_bundle import ReplayBundle
 from .verify_evidence import strict_json, verify_records
 
 
@@ -71,6 +72,10 @@ def artifact_counts(source_path, artifact_path):
         source = stream.read(MAX_DECODED_BYTES + 1)
     with Path(artifact_path).open("rb") as stream:
         encoded = stream.read(MAX_ARTIFACT_BYTES + 1)
+    return decoded_counts(source, encoded)
+
+
+def decoded_counts(source, encoded):
     if len(source) > MAX_DECODED_BYTES or len(encoded) > MAX_ARTIFACT_BYTES:
         raise ValueError("Artifact or original exceeds the local format limits")
     if encoded.startswith(b"\x1f\x8b"):
@@ -115,6 +120,10 @@ def exact(value):
 def read_measurements(path):
     with path.open(encoding="utf-8", newline="\n") as source:
         records = [strict_json(line, evidence=True) for line in source]
+    return measurement_records(records)
+
+
+def measurement_records(records):
     verdicts = verify_records(records)
     if len({verdict["run_id"] for verdict in verdicts}) != 1:
         raise ValueError("Scoring requires one run")
@@ -145,10 +154,18 @@ def grouped_artifacts(arguments, measurements, qualified):
     return supplied
 
 
-def score(path, baseline, ratio_bps, artifact_arguments):
+def score(path, baseline, ratio_bps, artifact_arguments, *, verify_bundle=False):
     if not 0 <= ratio_bps <= WEIGHT_TOTAL:
         raise ValueError("Ratio weight must be between 0 and 10000 basis points")
-    run_id, measurements, qualified = read_measurements(path)
+    bundle = None
+    if verify_bundle:
+        if artifact_arguments:
+            raise ValueError("Bundle replay uses the saved invocation artifacts")
+        bundle = ReplayBundle(path)
+        records = bundle.observations()
+        run_id, measurements, qualified = measurement_records(records)
+    else:
+        run_id, measurements, qualified = read_measurements(path)
     groups = defaultdict(dict)
     for obs in measurements.values():
         cohort = groups[obs["config_id"]]
@@ -158,7 +175,11 @@ def score(path, baseline, ratio_bps, artifact_arguments):
     if baseline not in groups:
         raise ValueError("Baseline must name a measured configuration")
 
-    supplied = grouped_artifacts(artifact_arguments, measurements, qualified)
+    if bundle is not None:
+        observations = {row["observation_id"]: row for row in records if "config_id" in row}
+        supplied = bundle.verify_invocations(observations, decoded_counts)
+    else:
+        supplied = grouped_artifacts(artifact_arguments, measurements, qualified)
     configurations = sorted(groups)
     scores = {config: {"observations": sorted(row["observation_id"] for row in groups[config].values())}
               for config in configurations}
@@ -233,11 +254,15 @@ def main():
     parser.add_argument("path", type=Path, help="verified IBS-0003 JSONL input")
     parser.add_argument("--baseline", required=True, help="baseline config ID")
     parser.add_argument("--ratio-weight-bps", type=int, default=5000)
-    parser.add_argument("--artifact", action="append", nargs=3, default=[],
+    artifacts = parser.add_mutually_exclusive_group()
+    artifacts.add_argument("--verify-bundle", action="store_true",
+                           help="verify the benchmark plan, invocations and digests beside the input")
+    artifacts.add_argument("--artifact", action="append", nargs=3, default=[],
                         metavar=("OBS_ID", "SOURCE", "ARTIFACT"))
     args = parser.parse_args()
     try:
-        result = score(args.path, args.baseline, args.ratio_weight_bps, args.artifact)
+        result = score(args.path, args.baseline, args.ratio_weight_bps, args.artifact,
+                       verify_bundle=args.verify_bundle)
     except (OSError, ValueError, RecursionError) as error:
         print(f"Invalid scoring input: {error}", file=sys.stderr)
         return 1
