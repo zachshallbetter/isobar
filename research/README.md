@@ -10,6 +10,7 @@ Updated 2026-11-26. This ledger indexes source reviews, reproductions, measured 
 - [Architecture decisions under review](../specifications/measurement-decisions.md)
 - [Scoring mathematics](scoring-mathematics.md)
 - [Experimental methodology and validation plan](measurement-methodology.md)
+- [Blocked timing pilot and interval coverage](measurement-methodology.md#executed-blocked-timing-pilot)
 
 Evidence levels: S = inspected source; D = inspected documentation; M = mathematical derivation; R = reproduced behavior in an executable fixture; E = measured observation; P = proposed requirement; U = unresolved. Static source findings are not runtime reproductions. Record source path, revision or blob hash, access date, evidence level and reproduction status for new findings. Do not infer absence of a feature from documentation silence.
 

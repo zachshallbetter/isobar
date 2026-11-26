@@ -18,3 +18,22 @@ python3 -B research/experiments/gzip-boundaries.py > /tmp/isobar-gzip-boundaries
 The upstream run checks its observations against [expected results](upstream-expected.json). It does not build the full benchmark applications. `--cc` and `--cxx` select the compilers. The gzip pilot prints fresh timing data. Compare the shape, work and validation of the run with the [recorded run](gzip-boundaries.jsonl). Timing values will vary.
 
 See the [evidence report](../measurement-evidence.md) for what each run establishes.
+
+## Run the blocked timing pilot
+
+From the repository root, use Python 3.10 or later on macOS or Linux.
+
+```sh
+python3 -B -m research.experiments.blocked_timing --run-id local-pilot > /tmp/isobar-blocked.json
+python3 -B -m research.experiments.blocked_timing --simulate 5000
+```
+
+The pilot report includes the fixed plan, per-worker clock probes, existing IBS-0003 records and the derived result. The exact saved observation and validation records are in [macOS JSONL](blocked-macos.jsonl) and [Linux VM JSONL](blocked-linux-qemu.jsonl). The [methods and results](../measurement-methodology.md#executed-blocked-timing-pilot) specify the estimand, stopping rule, exclusions and conditions.
+
+Install the [conformance dependencies](../../conformance/README.md) to run the automated checks and independently verify the archived records.
+
+```sh
+/tmp/isobar-conformance/bin/python -B -m unittest -v research.experiments.test_blocked_timing
+/tmp/isobar-conformance/bin/python -B conformance/verify_evidence.py research/experiments/blocked-macos.jsonl
+/tmp/isobar-conformance/bin/python -B conformance/verify_evidence.py research/experiments/blocked-linux-qemu.jsonl
+```
