@@ -1,0 +1,24 @@
+{
+  "TurboBench": {
+    "self": -1,
+    "different_ids": -1,
+    "same_id_pair": [-1, -1],
+    "ratio_only_ranks": [1, 2],
+    "ratio_and_encode_ranks": [2, 1],
+    "equal_metric_ranks": [1, 1]
+  },
+  "lzbench": {
+    "mixed_ns": [12000, 22000, 30000],
+    "clean_failed": 0,
+    "first_wrong_failed": 0,
+    "last_wrong_failed": 1
+  },
+  "weissman": {
+    "baseline_elapsed_ticks": 2,
+    "total_ticks": 5,
+    "close_completed": true,
+    "non_gzip_target_ratio": 7,
+    "singularity": "ZeroDivisionError",
+    "subunit_score": 0.5
+  }
+}

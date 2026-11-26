@@ -1,0 +1,314 @@
+{
+  "evidence": {
+    "observation": {
+      "schema_version": "0.1-experimental",
+      "run_id": "run-a",
+      "observation_id": "obs-a",
+      "worker_id": "worker-a",
+      "block_id": "block-a",
+      "sequence": 1,
+      "input_id": "input-a",
+      "config_id": "config-a",
+      "operation": "decode",
+      "phase": "measurement",
+      "status": "ok",
+      "elapsed_ns": 12000,
+      "invocation_count": 2,
+      "work_bytes": 16,
+      "validation_ref": "validation-a"
+    },
+    "validation": {
+      "schema_version": "0.1-experimental",
+      "run_id": "run-a",
+      "validation_id": "validation-a",
+      "observation_id": "obs-a",
+      "cadence": "every_invocation",
+      "checked_invocations": 2,
+      "status": "verified",
+      "method": "exact_bytes"
+    },
+    "records": [
+      {
+        "id": "every-invocation",
+        "expected": "qualified"
+      },
+      {
+        "id": "zero-work",
+        "expected": "qualified",
+        "change_observation": {
+          "work_bytes": 0
+        }
+      },
+      {
+        "id": "largest-exact-counter",
+        "expected": "qualified",
+        "change_observation": {
+          "work_bytes": 9007199254740991
+        }
+      },
+      {
+        "id": "outside-exact-counter-range",
+        "expected": "invalid",
+        "change_observation": {
+          "work_bytes": 9007199254740992
+        }
+      },
+      {
+        "id": "unsafe-sequence",
+        "expected": "invalid",
+        "change_observation": {
+          "sequence": 9007199254740992
+        }
+      },
+      {
+        "id": "negative-count",
+        "expected": "invalid",
+        "change_observation": {
+          "work_bytes": -1
+        }
+      },
+      {
+        "id": "fractional-nanoseconds",
+        "expected": "invalid",
+        "change_observation": {
+          "elapsed_ns": 1.5
+        }
+      },
+      {
+        "id": "boolean-nanoseconds",
+        "expected": "invalid",
+        "change_observation": {
+          "elapsed_ns": true
+        }
+      },
+      {
+        "id": "zero-ok-elapsed",
+        "expected": "invalid",
+        "change_observation": {
+          "elapsed_ns": 0
+        }
+      },
+      {
+        "id": "zero-invocations",
+        "expected": "invalid",
+        "change_observation": {
+          "invocation_count": 0
+        }
+      },
+      {
+        "id": "wrong-schema-version",
+        "expected": "invalid",
+        "change_observation": {
+          "schema_version": "0.2"
+        }
+      },
+      {
+        "id": "unknown-field",
+        "expected": "invalid",
+        "change_observation": {
+          "rate": 1234
+        }
+      },
+      {
+        "id": "warmup",
+        "expected": "unqualified",
+        "change_observation": {
+          "phase": "warmup"
+        }
+      },
+      {
+        "id": "last-invocation-batch",
+        "expected": "unqualified",
+        "change_validation": {
+          "cadence": "last_invocation",
+          "checked_invocations": 1
+        }
+      },
+      {
+        "id": "last-invocation-single",
+        "expected": "qualified",
+        "change_observation": {
+          "invocation_count": 1
+        },
+        "change_validation": {
+          "cadence": "last_invocation",
+          "checked_invocations": 1
+        }
+      },
+      {
+        "id": "roundtrip-mismatch",
+        "expected": "unqualified",
+        "change_validation": {
+          "status": "mismatch"
+        }
+      },
+      {
+        "id": "no-validation",
+        "expected": "unqualified",
+        "drop_observation": [
+          "validation_ref"
+        ],
+        "no_validation": true
+      },
+      {
+        "id": "dangling-validation-id",
+        "expected": "invalid",
+        "no_validation": true
+      },
+      {
+        "id": "different-validation-run",
+        "expected": "invalid",
+        "change_validation": {
+          "run_id": "other"
+        }
+      },
+      {
+        "id": "different-observation",
+        "expected": "invalid",
+        "change_validation": {
+          "observation_id": "other"
+        }
+      },
+      {
+        "id": "wrong-check-count",
+        "expected": "invalid",
+        "change_validation": {
+          "checked_invocations": 1
+        }
+      },
+      {
+        "id": "wrong-validation-version",
+        "expected": "invalid",
+        "change_validation": {
+          "schema_version": "0.2"
+        }
+      },
+      {
+        "id": "resolution-limited",
+        "expected": "unqualified",
+        "change_observation": {
+          "status": "resolution_limited",
+          "elapsed_ns": 0,
+          "reason": "clock tick"
+        }
+      },
+      {
+        "id": "resolution-limited-positive",
+        "expected": "invalid",
+        "change_observation": {
+          "status": "resolution_limited",
+          "reason": "clock tick"
+        }
+      },
+      {
+        "id": "failed-with-timing",
+        "expected": "invalid",
+        "change_observation": {
+          "status": "error",
+          "reason": "codec return"
+        },
+        "no_validation": true
+      },
+      {
+        "id": "timeout",
+        "expected": "unqualified",
+        "change_observation": {
+          "status": "timeout",
+          "reason": "wall budget"
+        },
+        "drop_observation": [
+          "elapsed_ns",
+          "work_bytes",
+          "invocation_count",
+          "validation_ref"
+        ],
+        "no_validation": true
+      },
+      {
+        "id": "error-without-reason",
+        "expected": "invalid",
+        "change_observation": {
+          "status": "error"
+        },
+        "drop_observation": [
+          "elapsed_ns",
+          "work_bytes",
+          "invocation_count",
+          "validation_ref"
+        ],
+        "no_validation": true
+      }
+    ],
+    "json": [
+      {
+        "id": "json-duplicate-key",
+        "raw": "{\"elapsed_ns\": 1, \"elapsed_ns\": 2}",
+        "expected": "invalid"
+      },
+      {
+        "id": "json-nonfinite-token",
+        "raw": "{\"elapsed_ns\": NaN}",
+        "expected": "invalid"
+      },
+      {
+        "id": "json-valid-control",
+        "raw": "{\"elapsed_ns\": 2}",
+        "expected": "valid"
+      }
+    ],
+    "numeric_wire": [
+      {"id": "wire-max-integer", "raw": "9007199254740991", "expected": "valid"},
+      {"id": "wire-integral-exponent", "raw": "1.2e3", "expected": "valid"},
+      {"id": "wire-rounded-fraction", "raw": "9007199254740991.1", "expected": "invalid"},
+      {"id": "wire-overflow-exponent", "raw": "1e400", "expected": "invalid"}
+    ]
+  },
+  "metrics": [
+    {"id": "identity", "operation": "composite", "metrics": [{"candidate": 7, "reference": 7, "weight": 1, "direction": "max"}], "expected": 100.0},
+    {"id": "double", "operation": "composite", "metrics": [{"candidate": 8, "reference": 4, "weight": 1, "direction": "max"}], "expected": 200.0},
+    {"id": "reciprocal", "operation": "composite", "metrics": [{"candidate": 2, "reference": 1, "weight": 0.5, "direction": "max"}, {"candidate": 1, "reference": 2, "weight": 0.5, "direction": "max"}], "expected": 100.0},
+    {"id": "minimize-seconds", "operation": "composite", "metrics": [{"candidate": 0.003, "reference": 0.006, "weight": 1, "direction": "min"}], "expected": 200.0},
+    {"id": "minimize-nanoseconds", "operation": "composite", "metrics": [{"candidate": 3000000, "reference": 6000000, "weight": 1, "direction": "min"}], "expected": 200.0},
+    {"id": "zero-weight-missing", "operation": "composite", "metrics": [{"candidate": 7, "reference": 7, "weight": 1, "direction": "max"}, {"candidate": null, "reference": null, "weight": 0, "direction": "max"}], "expected": 100.0},
+    {"id": "required-missing", "operation": "composite", "metrics": [{"candidate": null, "reference": 1, "weight": 1, "direction": "max"}], "expected": "unavailable"},
+    {"id": "required-zero", "operation": "composite", "metrics": [{"candidate": 0, "reference": 1, "weight": 1, "direction": "max"}], "expected": "unavailable"},
+    {"id": "required-boolean", "operation": "composite", "metrics": [{"candidate": true, "reference": 1, "weight": 1, "direction": "max"}], "expected": "unavailable"},
+    {"id": "negative-weight", "operation": "composite", "metrics": [{"candidate": 1, "reference": 1, "weight": -0.5, "direction": "max"}, {"candidate": 1, "reference": 1, "weight": 1.5, "direction": "max"}], "expected": "invalid_weights"},
+    {"id": "weight-sum", "operation": "composite", "metrics": [{"candidate": 1, "reference": 1, "weight": 0.9, "direction": "max"}], "expected": "invalid_weights"},
+    {"id": "finite-log-intermediates", "operation": "composite", "metrics": [{"candidate": 1e+300, "reference": 1e-300, "weight": 0.5, "direction": "max"}, {"candidate": 1e-300, "reference": 1e+300, "weight": 0.5, "direction": "max"}], "expected": 100.0},
+    {"id": "overflow", "operation": "composite", "metrics": [{"candidate": 1e+300, "reference": 1e-300, "weight": 1, "direction": "max"}], "expected": "out_of_range"},
+    {"id": "underflow", "operation": "composite", "metrics": [{"candidate": 1e-300, "reference": 1e+300, "weight": 1, "direction": "max"}], "expected": "out_of_range"},
+    {"id": "historical-singularity", "operation": "historical", "reference_time": 2, "candidate_time": 1, "expected": "unavailable"},
+    {"id": "historical-nonpositive", "operation": "historical", "reference_time": 2, "candidate_time": 0, "expected": "unavailable"},
+    {"id": "historical-faster-subunit", "operation": "historical", "reference_time": 0.5, "candidate_time": 0.25, "expected": 0.5},
+    {"id": "historical-seconds", "operation": "historical", "reference_time": 10, "candidate_time": 5, "expected": 1.430676558073393},
+    {"id": "historical-milliseconds", "operation": "historical", "reference_time": 10000, "candidate_time": 5000, "expected": 1.081382113212896},
+    {"id": "strict-dominance", "operation": "dominates", "a": [2, 4], "b": [1, 4], "directions": ["max", "min"], "expected": true},
+    {"id": "equal-points", "operation": "dominates", "a": [2, 4], "b": [2, 4], "directions": ["max", "min"], "expected": false},
+    {"id": "tradeoff", "operation": "dominates", "a": [2, 5], "b": [1, 4], "directions": ["max", "min"], "expected": false},
+    {"id": "missing-dimension", "operation": "dominates", "a": [2, null], "b": [1, 4], "directions": ["max", "min"], "expected": "unavailable"},
+    {"id": "disabled-dimension", "operation": "dominates", "a": [2, 5], "b": [2, 4], "directions": ["max", "disabled"], "expected": false},
+    {"id": "frontier", "operation": "frontier", "points": {"a": [2, 5], "b": [1, 4], "c": [2, 5], "d": [1, 5]}, "directions": ["max", "min"], "expected": ["a", "b", "c"]},
+    {"id": "frontier-missing", "operation": "frontier", "points": {"a": [2, null], "b": [1, 4]}, "directions": ["max", "min"], "expected": "unavailable"},
+    {"id": "frontier-permuted", "operation": "frontier", "points": {"d": [1, 5], "c": [2, 5], "b": [1, 4], "a": [2, 5]}, "directions": ["max", "min"], "expected": ["a", "b", "c"]},
+    {"id": "total-byte-ratio", "operation": "ratio", "sizes": [[10, 1], [1000, 500]], "expected": 2.0159680638722555},
+    {"id": "empty-original", "operation": "ratio", "sizes": [[0, 20]], "expected": "unavailable"},
+    {"id": "empty-artifact", "operation": "ratio", "sizes": [[20, 0]], "expected": "unavailable"},
+    {"id": "serial-total-throughput", "operation": "throughput_bytes_per_second", "trials": [[100, 1000000000], [100, 3000000000]], "expected": 50.0},
+    {"id": "mixed-zero-duration-throughput", "operation": "throughput_bytes_per_second", "trials": [[10, 0], [10, 20]], "expected": "unavailable"},
+    {"id": "zero-duration-throughput", "operation": "throughput_bytes_per_second", "trials": [[10, 0]], "expected": "unavailable"}
+  ],
+  "codecs": [
+    {"id": "gzip-single", "format": "gzip", "input_hex": "1f8b08000000000000ff7304008b9ed9d301000000", "expected": {"output_hex": "41"}},
+    {"id": "gzip-empty", "format": "gzip", "input_hex": "1f8b08000000000000ff03000000000000000000", "expected": {"output_hex": ""}},
+    {"id": "gzip-two-members", "format": "gzip", "input_hex": "1f8b08000000000000ff7304008b9ed9d3010000001f8b08000000000000ff73020031cfd04a01000000", "first_member_control": {"output_hex": "41", "at_member_end": true, "unused_bytes": 21}, "expected": {"output_hex": "4142"}},
+    {"id": "gzip-truncated", "format": "gzip", "input_hex": "1f8b08000000000000ff7304008b9ed9d3010000", "expected": "rejected"},
+    {"id": "gzip-truncated-second", "format": "gzip", "input_hex": "1f8b08000000000000ff7304008b9ed9d3010000001f8b08000000000000ff73020031cfd04a010000", "first_member_control": {"output_hex": "41", "at_member_end": true, "unused_bytes": 20}, "expected": "rejected"},
+    {"id": "gzip-bad-crc", "format": "gzip", "input_hex": "1f8b08000000000000ff7304008a9ed9d301000000", "expected": "rejected"},
+    {"id": "zstd-single", "format": "zstd", "input_hex": "28b52ffd200109000041", "expected": {"output_hex": "41"}},
+    {"id": "zstd-empty", "format": "zstd", "input_hex": "28b52ffd2000010000", "expected": {"output_hex": ""}},
+    {"id": "zstd-two-frames", "format": "zstd", "input_hex": "28b52ffd20010900004128b52ffd200109000042", "expected": {"output_hex": "4142"}},
+    {"id": "zstd-skippable-between-frames", "format": "zstd", "input_hex": "28b52ffd200109000041502a4d180300000078797a28b52ffd200109000042", "expected": {"output_hex": "4142"}},
+    {"id": "zstd-truncated-second", "format": "zstd", "input_hex": "28b52ffd20010900004128b52ffd2001090000", "expected": "rejected", "rejected_output_hex": "41"}
+  ]
+}

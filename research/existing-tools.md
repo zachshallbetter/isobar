@@ -1,10 +1,10 @@
 # Existing tools: initial evidence review
 
-Reviewed 2026-11-26. Source snapshots identified by Git blob SHA where available; links to branches may change. No upstream code was executed or modified.
+Reviewed 2026-11-26. Source snapshots identified by Git blob SHA where available; links to branches may change. This page records the initial static pass. See the [follow-up reproductions](measurement-evidence.md).
 
 ## Weissman score calculator — source inspection (S)
 
-Source: [weissman.py](https://github.com/lorenzosaino/weissman-score/blob/master/weissman.py), blob SHA `accb5a8c05735c80780a5f44544a86851f5d3a81`, declares version 0.2.
+Source: [weissman.py](https://github.com/lorenzosaino/weissman-score/blob/f28197250f3dc7c42373665218892d21592de8f3/weissman.py), blob SHA `accb5a8c05735c80780a5f44544a86851f5d3a81`, declares version 0.2.
 
 | ID | Evidence in source | Consequence / proposed Isobar response |
 |---|---|---|
@@ -35,7 +35,7 @@ Documents in-memory tests, codec parameters, multi-file and block modes, minimum
 
 ## Open investigations (U)
 
-Squash, TurboBench and lzbench source-level review; benchmark licenses and redistribution; reference codec build/format interoperability; historical score conventions; supported hardware counters. No claim of unique feature coverage or superiority is warranted.
+Squash source-level review and full TurboBench/lzbench runner trials; benchmark licenses and redistribution; reference codec build/format interoperability; historical score conventions; supported hardware counters. No claim of unique feature coverage or superiority is warranted.
 
 ## Decision (P)
 

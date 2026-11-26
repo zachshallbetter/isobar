@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Isobar experimental IBS-0003 observation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "run_id", "observation_id", "worker_id", "block_id",
+    "sequence", "input_id", "config_id", "operation", "phase", "status"
+  ],
+  "properties": {
+    "schema_version": {"const": "0.1-experimental"},
+    "run_id": {"$ref": "#/$defs/id"},
+    "observation_id": {"$ref": "#/$defs/id"},
+    "worker_id": {"$ref": "#/$defs/id"},
+    "block_id": {"$ref": "#/$defs/id"},
+    "sequence": {"$ref": "#/$defs/count"},
+    "input_id": {"$ref": "#/$defs/id"},
+    "config_id": {"$ref": "#/$defs/id"},
+    "operation": {"enum": ["encode", "decode"]},
+    "phase": {"enum": ["warmup", "measurement"]},
+    "status": {"enum": ["ok", "resolution_limited", "error", "timeout"]},
+    "elapsed_ns": {"$ref": "#/$defs/count"},
+    "invocation_count": {"$ref": "#/$defs/count", "minimum": 1},
+    "work_bytes": {"$ref": "#/$defs/count"},
+    "validation_ref": {"$ref": "#/$defs/id"},
+    "reason": {"type": "string", "minLength": 1, "maxLength": 160}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"enum": ["ok", "resolution_limited"]}}},
+      "then": {"required": ["elapsed_ns", "invocation_count", "work_bytes"]},
+      "else": {
+        "not": {
+          "anyOf": [
+            {"required": ["elapsed_ns"]}, {"required": ["work_bytes"]},
+            {"required": ["invocation_count"]}, {"required": ["validation_ref"]}
+          ]
+        }
+      }
+    },
+    {
+      "if": {"properties": {"status": {"const": "ok"}}},
+      "then": {"properties": {"elapsed_ns": {"minimum": 1}}, "not": {"required": ["reason"]}},
+      "else": {"required": ["reason"]}
+    },
+    {
+      "if": {"properties": {"status": {"const": "resolution_limited"}}},
+      "then": {"properties": {"elapsed_ns": {"const": 0}}}
+    }
+  ],
+  "$defs": {
+    "id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "count": {"type": "integer", "minimum": 0, "maximum": 9007199254740991}
+  }
+}

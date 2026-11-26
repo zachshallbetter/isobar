@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Isobar experimental IBS-0003 validation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "run_id", "validation_id", "observation_id", "cadence",
+               "checked_invocations", "status", "method"],
+  "properties": {
+    "schema_version": {"const": "0.1-experimental"},
+    "run_id": {"$ref": "#/$defs/id"},
+    "validation_id": {"$ref": "#/$defs/id"},
+    "observation_id": {"$ref": "#/$defs/id"},
+    "cadence": {"enum": ["every_invocation", "last_invocation"]},
+    "checked_invocations": {"type": "integer", "minimum": 1, "maximum": 9007199254740991},
+    "status": {"enum": ["verified", "mismatch"]},
+    "method": {"const": "exact_bytes"}
+  },
+  "$defs": {
+    "id": {"type": "string", "minLength": 1, "maxLength": 128}
+  }
+}

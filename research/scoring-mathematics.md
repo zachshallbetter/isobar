@@ -36,4 +36,6 @@ A dominates B iff all selected comparable dimensions are no worse and at least o
 | Pareto equal points | Neither dominates |
 | Pareto tradeoff | Neither dominates |
 
-Source for historical implementation: [weissman.py](https://github.com/lorenzosaino/weissman-score/blob/master/weissman.py); see existing-tools.md for inspected blob. Numerical examples are derived, not measured codec results.
+Source for historical implementation: [weissman.py](https://github.com/lorenzosaino/weissman-score/blob/f28197250f3dc7c42373665218892d21592de8f3/weissman.py#L130-L139); see existing-tools.md for inspected blob. Numerical examples are derived, not measured codec results.
+
+[Executable conformance vectors](../conformance/vectors.json) cover these cases, exact dominance with disabled dimensions, permutation invariance, and finite log-space cancellation when individual normalized ratios would overflow or underflow.
